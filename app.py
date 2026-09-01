@@ -2,6 +2,7 @@
 app.py — Streamlit UI สำหรับ rocket_planner
 รัน: streamlit run app.py
 """
+import booster as bst   
 import io
 import json
 import numpy as np
@@ -198,6 +199,59 @@ with st.sidebar.expander("⚙️ ความละเอียด"):
     n_orbit = st.slider("จำนวนรอบวงโคจรที่พล็อต", 1, 6, 3)
 
 run = st.sidebar.button("▶️ คำนวณ", type="primary", use_container_width=True)
+
+# ---------- Side booster ----------
+with st.sidebar.expander("🧨 Side booster (strap-on)"):
+    use_b = st.checkbox("ติด booster ข้าง", value=False)
+    groups = []
+    if use_b:
+        ng = st.number_input("จำนวน **กลุ่ม** booster", 1, 4, 1, 1,
+                             help="กลุ่ม = ชุดที่จุดพร้อมกัน เช่น Delta II มี 2 กลุ่ม")
+        for i in range(int(ng)):
+            st.markdown(f"**— กลุ่มที่ {i+1} —**")
+            c1, c2 = st.columns(2)
+            nm = c1.text_input("ชื่อ", f"SRB-{i+1}", key=f"bn{i}")
+            cnt = c2.number_input("จำนวนตัว", 1, 12, 2 if i == 0 else 3, key=f"bc{i}")
+            c1, c2 = st.columns(2)
+            tsl = c1.number_input("แรงขับ SL (kN/ตัว)", 1.0, 20000.0, 1663.0, key=f"bs{i}")
+            tvc = c2.number_input("แรงขับ Vac (kN/ตัว)", 1.0, 20000.0, 1850.0, key=f"bv{i}")
+            c1, c2 = st.columns(2)
+            isl = c1.number_input("Isp SL (s)", 100.0, 500.0, 274.0, key=f"bi{i}")
+            ivc = c2.number_input("Isp Vac (s)", 100.0, 500.0, 279.0, key=f"bj{i}")
+            c1, c2 = st.columns(2)
+            mp = c1.number_input("เชื้อเพลิง (kg/ตัว)", 10.0, 6e5, 44200.0, key=f"bp{i}")
+            md = c2.number_input("มวลแห้ง (kg/ตัว)", 10.0, 1e5, 4000.0, key=f"bd{i}")
+            c1, c2, c3 = st.columns(3)
+            bt = c1.number_input("เวลาเผา (s)", 5.0, 400.0, 94.0, key=f"bt{i}")
+            ig = c2.number_input("จุดที่ t= (s)", 0.0, 300.0, 0.0, key=f"bg{i}",
+                                 help="0 = จุดพร้อม core, >0 = air-lit")
+            jd = c3.number_input("หน่วงสลัด (s)", 0.0, 30.0, 2.0, key=f"bx{i}")
+            ar = st.number_input("พื้นที่หน้าตัด (m²/ตัว)", 0.05, 50.0, 1.77, key=f"ba{i}")
+            groups.append(bst.make_group(nm, cnt, tsl, tvc, isl, ivc,
+                                         mp, md, bt, ar, ig, jd))
+
+        st.divider()
+        thr_b = st.slider("Core throttle ขณะมี booster (%)", 20, 100, 100, 5)
+        thr_s = st.slider("Core throttle หลังสลัด (%)", 50, 100, 100, 5)
+        auto = st.checkbox("คำนวณเวลาเผา core ใหม่อัตโนมัติ", True,
+                           help="ถ้า throttle ต่ำ core จะเผาได้นานกว่า spec")
+
+        phases, tlog = bst.build_boost_phases(stages_cfg[0], groups,
+                                              thr_b, thr_s, auto)
+        for w in bst.validate(stages_cfg[0], groups, phases):
+            st.warning(w)
+        stages_cfg = phases + stages_cfg[1:]
+
+        st.success(f"สร้าง {len(phases)} เฟสจาก core 1 ท่อน")
+        st.dataframe([{
+            "ช่วง (s)": f"{r['t0']:.0f}–{r['t1']:.0f}",
+            "เฟส": r["name"].split(": ")[1],
+            "F_SL (kN)": f"{r['F_sl']:,.0f}",
+            "Isp_vac": f"{r['isp_vac']:.0f}",
+            "เชื้อเพลิง (t)": f"{r['prop']/1000:.1f}",
+            "สลัด (t)": f"{r['jett']/1000:.1f}",
+            "Core": r["twr_note"],
+        } for r in tlog], use_container_width=True, hide_index=True)
 
 cfg = dict(stages=stages_cfg, payload=payload, fairing_mass=fmass,
            fairing_alt=falt, site_lat=site_lat, site_lon=site_lon,
