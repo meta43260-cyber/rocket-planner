@@ -1,4 +1,4 @@
-True
+"""
 rocket_planner.py — Rocket Ascent, Orbit & Observation Engine
 3-DOF ascent (ECI) + J2 orbit propagation + look angles + airspace check
 
