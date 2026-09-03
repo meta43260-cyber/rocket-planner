@@ -63,7 +63,6 @@ PRESETS = {
         vertical_time=10.0, kick_angle=6.0, kick_duration=15.0),
 }
 
-
 def jd_from_date(y, mo, d, hh, mm, ss):
     """ปฏิทินสากล → Julian Date (UTC)"""
     if mo <= 2:
@@ -72,7 +71,6 @@ def jd_from_date(y, mo, d, hh, mm, ss):
     B = 2 - A + A // 4
     jd = int(365.25*(y + 4716)) + int(30.6001*(mo + 1)) + d + B - 1524.5
     return jd + (hh + mm/60.0 + ss/3600.0)/24.0
-
 
 def make_kml(df, name="Trajectory", color="ff00aaff"):
     pts = "\n".join(f"{r.lon:.6f},{r.lat:.6f},{r.alt_km*1000:.1f}"
@@ -88,7 +86,6 @@ def make_kml(df, name="Trajectory", color="ff00aaff"):
 </coordinates></LineString></Placemark>
 </Document></kml>"""
 
-
 def split_dateline(lat, lon):
     """ตัดเส้นเมื่อข้ามเส้นแบ่งวัน ±180° เพื่อไม่ให้กราฟลากพาดจอ"""
     segs, s_lat, s_lon = [], [lat[0]], [lon[0]]
@@ -100,11 +97,10 @@ def split_dateline(lat, lon):
     segs.append((s_lat, s_lon))
     return segs
 
-
 # ============================================================
 # SIDEBAR
 # ============================================================
-st.sidebar.title("🚀 ตั้งค่าภารกิจ")
+st.sidebar.title("🚀 ภารกิจและวงโคจร")
 
 up = st.sidebar.file_uploader("โหลด preset (.json)", type="json")
 if up is not None and not st.session_state.get("_loaded"):
@@ -141,117 +137,118 @@ with st.sidebar.expander("🕐 เวลาปล่อย (UTC)"):
     c4, c5 = st.columns(2)
     hh = c4.number_input("ชม.", 0, 23, 22)
     mi = c5.number_input("นาที", 0, 59, 30)
-    jd = jd_from_date(int(yy), int(mo), int(dd), int(hh), int(mi), 0)
-    st.caption(f"JD = {jd:.5f}")
+    launch_jd = jd_from_date(int(yy), int(mo), int(dd), int(hh), int(mi), 0)
+    st.caption(f"JD = {launch_jd:.5f}")
 
 with st.sidebar.expander("🛩️ โปรไฟล์การไต่"):
     vt = st.slider("ไต่ตรง (s)", 0.0, 30.0, float(base["vertical_time"]), 0.5)
     ka = st.slider("มุม pitch kick (°)", 0.0, 20.0, float(base["kick_angle"]), 0.1)
     kd = st.slider("ระยะเวลา kick (s)", 1.0, 40.0, float(base["kick_duration"]), 0.5)
 
-with st.sidebar.expander("🛰️ ยานพาหนะ", expanded=False):
-    payload = st.number_input("Payload (kg)", 0.0, 100000.0,
-                              float(base["payload"]), 10.0)
-    fmass = st.number_input("Fairing (kg)", 0.0, 10000.0,
-                            float(base["fairing_mass"]), 10.0)
-    falt = st.number_input("ปลด fairing ที่ (km)", 40.0, 200.0,
-                           float(base["fairing_alt"]), 5.0)
-    nstage = st.radio("จำนวนสเตจ", [1, 2], index=1, horizontal=True)
-
-    stages_cfg = []
-    for i in range(nstage):
-        d = base["stages"][i] if i < len(base["stages"]) else base["stages"][-1]
-        st.markdown(f"**สเตจ {i+1}**")
-        t_sl = st.number_input(f"แรงขับ SL (kN) #{i+1}", 1.0, 20000.0,
-                               float(d["thrust_sl"]), 1.0, key=f"tsl{i}")
-        t_vc = st.number_input(f"แรงขับ Vac (kN) #{i+1}", 1.0, 20000.0,
-                               float(d["thrust_vac"]), 1.0, key=f"tvc{i}")
-        i_sl = st.number_input(f"Isp SL (s) #{i+1}", 100.0, 500.0,
-                               float(d["isp_sl"]), 1.0, key=f"isl{i}")
-        i_vc = st.number_input(f"Isp Vac (s) #{i+1}", 100.0, 500.0,
-                               float(d["isp_vac"]), 1.0, key=f"ivc{i}")
-        m_p = st.number_input(f"เชื้อเพลิง (kg) #{i+1}", 10.0, 1e6,
-                              float(d["prop_mass"]), 100.0, key=f"mp{i}")
-        m_d = st.number_input(f"มวลแห้ง (kg) #{i+1}", 10.0, 2e5,
-                              float(d["dry_mass"]), 10.0, key=f"md{i}")
-        b_t = st.number_input(f"เวลาเผาสูงสุด (s) #{i+1}", 5.0, 1000.0,
-                              float(d["burn_time"]), 1.0, key=f"bt{i}")
-        ar = st.number_input(f"พื้นที่หน้าตัด (m²) #{i+1}", 0.1, 100.0,
-                             float(d["area"]), 0.01, key=f"ar{i}")
-        stages_cfg.append(dict(name=f"Stage {i+1}", thrust_sl=t_sl, thrust_vac=t_vc,
-                               isp_sl=i_sl, isp_vac=i_vc, prop_mass=m_p,
-                               dry_mass=m_d, burn_time=b_t, area=ar))
-
-with st.sidebar.expander("📷 จุดสังเกตการณ์", expanded=True):
-    same = st.checkbox("ใช้พิกัดเดียวกับฐานปล่อย", value=False)
-    if same:
-        obs_lat, obs_lon, obs_alt = site_lat, site_lon, site_alt
-    else:
-        obs_lat = st.number_input("ละติจูดผู้ชม (°)", -90.0, 90.0,
-                                  float(site_lat) - 0.15, 0.0001, format="%.4f")
-        obs_lon = st.number_input("ลองจิจูดผู้ชม (°)", -180.0, 180.0,
-                                  float(site_lon) - 0.05, 0.0001, format="%.4f")
-        obs_alt = st.number_input("ความสูงผู้ชม (m)", -500.0, 5000.0, 5.0, 1.0)
-    min_el = st.slider("มุมเงยต่ำสุดที่มองเห็น (°)", 0.0, 30.0, 5.0, 0.5)
-
 with st.sidebar.expander("⚙️ ความละเอียด"):
     dt = st.select_slider("timestep (s)", [0.02, 0.05, 0.1, 0.2], value=0.05)
     n_orbit = st.slider("จำนวนรอบวงโคจรที่พล็อต", 1, 6, 3)
 
-run = st.sidebar.button("▶️ คำนวณ", type="primary", use_container_width=True)
+# ============================================================
+# MAIN PAGE (Vehicle & Observers Config)
+# ============================================================
+st.title("🚀 Rocket Ascent & Observation Planner")
 
-# ---------- Side booster ----------
-with st.sidebar.expander("🧨 Side booster (strap-on)"):
-    use_b = st.checkbox("ติด booster ข้าง", value=False)
-    groups = []
-    if use_b:
-        ng = st.number_input("จำนวน **กลุ่ม** booster", 1, 4, 1, 1,
-                             help="กลุ่ม = ชุดที่จุดพร้อมกัน เช่น Delta II มี 2 กลุ่ม")
-        for i in range(int(ng)):
-            st.markdown(f"**— กลุ่มที่ {i+1} —**")
-            c1, c2 = st.columns(2)
-            nm = c1.text_input("ชื่อ", f"SRB-{i+1}", key=f"bn{i}")
-            cnt = c2.number_input("จำนวนตัว", 1, 12, 2 if i == 0 else 3, key=f"bc{i}")
-            c1, c2 = st.columns(2)
-            tsl = c1.number_input("แรงขับ SL (kN/ตัว)", 1.0, 20000.0, 1663.0, key=f"bs{i}")
-            tvc = c2.number_input("แรงขับ Vac (kN/ตัว)", 1.0, 20000.0, 1850.0, key=f"bv{i}")
-            c1, c2 = st.columns(2)
-            isl = c1.number_input("Isp SL (s)", 100.0, 500.0, 274.0, key=f"bi{i}")
-            ivc = c2.number_input("Isp Vac (s)", 100.0, 500.0, 279.0, key=f"bj{i}")
-            c1, c2 = st.columns(2)
-            mp = c1.number_input("เชื้อเพลิง (kg/ตัว)", 10.0, 6e5, 44200.0, key=f"bp{i}")
-            md = c2.number_input("มวลแห้ง (kg/ตัว)", 10.0, 1e5, 4000.0, key=f"bd{i}")
-            c1, c2, c3 = st.columns(3)
-            bt = c1.number_input("เวลาเผา (s)", 5.0, 400.0, 94.0, key=f"bt{i}")
-            ig = c2.number_input("จุดที่ t= (s)", 0.0, 300.0, 0.0, key=f"bg{i}",
-                                 help="0 = จุดพร้อม core, >0 = air-lit")
-            jd = c3.number_input("หน่วงสลัด (s)", 0.0, 30.0, 2.0, key=f"bx{i}")
-            ar = st.number_input("พื้นที่หน้าตัด (m²/ตัว)", 0.05, 50.0, 1.77, key=f"ba{i}")
-            groups.append(bst.make_group(nm, cnt, tsl, tvc, isl, ivc,
-                                         mp, md, bt, ar, ig, jd))
+col_veh, col_obs = st.columns([2, 1])
 
-        st.divider()
-        thr_b = st.slider("Core throttle ขณะมี booster (%)", 20, 100, 100, 5)
-        thr_s = st.slider("Core throttle หลังสลัด (%)", 50, 100, 100, 5)
-        auto = st.checkbox("คำนวณเวลาเผา core ใหม่อัตโนมัติ", True,
-                           help="ถ้า throttle ต่ำ core จะเผาได้นานกว่า spec")
+with col_veh:
+    with st.expander("🛰️ ยานพาหนะและสเตจ (Vehicle Setup)", expanded=True):
+        c_p, c_f, c_a = st.columns(3)
+        payload = c_p.number_input("Payload (kg)", 0.0, 100000.0, float(base["payload"]), 10.0)
+        fmass = c_f.number_input("Fairing (kg)", 0.0, 10000.0, float(base["fairing_mass"]), 10.0)
+        falt = c_a.number_input("ปลด fairing ที่ (km)", 40.0, 200.0, float(base["fairing_alt"]), 5.0)
+        
+        nstage = st.number_input("จำนวนสเตจ", min_value=1, max_value=5, value=len(base.get("stages", 2)), step=1)
 
-        phases, tlog = bst.build_boost_phases(stages_cfg[0], groups,
-                                              thr_b, thr_s, auto)
-        for w in bst.validate(stages_cfg[0], groups, phases):
-            st.warning(w)
-        stages_cfg = phases + stages_cfg[1:]
+        stages_cfg = []
+        for i in range(int(nstage)):
+            d = base["stages"][i] if i < len(base["stages"]) else base["stages"][-1]
+            st.markdown(f"**สเตจ {i+1}**")
+            c1, c2, c3, c4 = st.columns(4)
+            t_sl = c1.number_input(f"แรงขับ SL (kN)", 1.0, 20000.0, float(d["thrust_sl"]), 1.0, key=f"tsl{i}")
+            t_vc = c2.number_input(f"แรงขับ Vac (kN)", 1.0, 20000.0, float(d["thrust_vac"]), 1.0, key=f"tvc{i}")
+            i_sl = c3.number_input(f"Isp SL (s)", 100.0, 500.0, float(d["isp_sl"]), 1.0, key=f"isl{i}")
+            i_vc = c4.number_input(f"Isp Vac (s)", 100.0, 500.0, float(d["isp_vac"]), 1.0, key=f"ivc{i}")
+            
+            c5, c6, c7, c8 = st.columns(4)
+            m_p = c5.number_input(f"เชื้อเพลิง (kg)", 10.0, 1e6, float(d["prop_mass"]), 100.0, key=f"mp{i}")
+            m_d = c6.number_input(f"มวลแห้ง (kg)", 10.0, 2e5, float(d["dry_mass"]), 10.0, key=f"md{i}")
+            b_t = c7.number_input(f"เวลาเผาสูงสุด (s)", 5.0, 1000.0, float(d["burn_time"]), 1.0, key=f"bt{i}")
+            ar = c8.number_input(f"พื้นที่หน้าตัด (m²)", 0.1, 100.0, float(d["area"]), 0.01, key=f"ar{i}")
+            
+            stages_cfg.append(dict(name=f"Stage {i+1}", thrust_sl=t_sl, thrust_vac=t_vc,
+                                   isp_sl=i_sl, isp_vac=i_vc, prop_mass=m_p,
+                                   dry_mass=m_d, burn_time=b_t, area=ar))
 
-        st.success(f"สร้าง {len(phases)} เฟสจาก core 1 ท่อน")
-        st.dataframe([{
-            "ช่วง (s)": f"{r['t0']:.0f}–{r['t1']:.0f}",
-            "เฟส": r["name"].split(": ")[1],
-            "F_SL (kN)": f"{r['F_sl']:,.0f}",
-            "Isp_vac": f"{r['isp_vac']:.0f}",
-            "เชื้อเพลิง (t)": f"{r['prop']/1000:.1f}",
-            "สลัด (t)": f"{r['jett']/1000:.1f}",
-            "Core": r["twr_note"],
-        } for r in tlog], use_container_width=True, hide_index=True)
+    with st.expander("🧨 Side booster (strap-on)", expanded=False):
+        use_b = st.checkbox("ติด booster ข้าง", value=False)
+        groups = []
+        if use_b:
+            ng = st.number_input("จำนวน **กลุ่ม** booster", 1, 4, 1, 1,
+                                 help="กลุ่ม = ชุดที่จุดพร้อมกัน เช่น Delta II มี 2 กลุ่ม")
+            for i in range(int(ng)):
+                st.markdown(f"**— กลุ่มที่ {i+1} —**")
+                c1, c2 = st.columns(2)
+                nm = c1.text_input("ชื่อ", f"SRB-{i+1}", key=f"bn{i}")
+                cnt = c2.number_input("จำนวนตัว", 1, 12, 2 if i == 0 else 3, key=f"bc{i}")
+                c1, c2 = st.columns(2)
+                tsl = c1.number_input("แรงขับ SL (kN/ตัว)", 1.0, 20000.0, 1663.0, key=f"bs{i}")
+                tvc = c2.number_input("แรงขับ Vac (kN/ตัว)", 1.0, 20000.0, 1850.0, key=f"bv{i}")
+                c1, c2 = st.columns(2)
+                isl = c1.number_input("Isp SL (s)", 100.0, 500.0, 274.0, key=f"bi{i}")
+                ivc = c2.number_input("Isp Vac (s)", 100.0, 500.0, 279.0, key=f"bj{i}")
+                c1, c2 = st.columns(2)
+                mp = c1.number_input("เชื้อเพลิง (kg/ตัว)", 10.0, 6e5, 44200.0, key=f"bp{i}")
+                md = c2.number_input("มวลแห้ง (kg/ตัว)", 10.0, 1e5, 4000.0, key=f"bd{i}")
+                c1, c2, c3, c4 = st.columns(4)
+                b_bt = c1.number_input("เวลาเผา (s)", 5.0, 400.0, 94.0, key=f"b_bt{i}")
+                b_ig = c2.number_input("จุดที่ t= (s)", 0.0, 300.0, 0.0, key=f"bg{i}", help="0 = จุดพร้อม core")
+                b_jd = c3.number_input("หน่วงสลัด (s)", 0.0, 30.0, 2.0, key=f"bx{i}")
+                b_ar = c4.number_input("หน้าตัด (m²)", 0.05, 50.0, 1.77, key=f"ba{i}")
+                
+                groups.append(bst.make_group(nm, cnt, tsl, tvc, isl, ivc,
+                                             mp, md, b_bt, b_ar, b_ig, b_jd))
+
+            st.divider()
+            thr_b = st.slider("Core throttle ขณะมี booster (%)", 20, 100, 100, 5)
+            thr_s = st.slider("Core throttle หลังสลัด (%)", 50, 100, 100, 5)
+            auto = st.checkbox("คำนวณเวลาเผา core ใหม่อัตโนมัติ", True,
+                               help="ถ้า throttle ต่ำ core จะเผาได้นานกว่า spec")
+
+            phases, tlog = bst.build_boost_phases(stages_cfg[0], groups,
+                                                  thr_b, thr_s, auto)
+            for w in bst.validate(stages_cfg[0], groups, phases):
+                st.warning(w)
+            stages_cfg = phases + stages_cfg[1:]
+
+            st.success(f"สร้าง {len(phases)} เฟสจาก core 1 ท่อน")
+            st.dataframe([{
+                "ช่วง (s)": f"{r['t0']:.0f}–{r['t1']:.0f}",
+                "เฟส": r["name"].split(": ")[1],
+                "F_SL (kN)": f"{r['F_sl']:,.0f}",
+                "Isp_vac": f"{r['isp_vac']:.0f}",
+                "เชื้อเพลิง (t)": f"{r['prop']/1000:.1f}",
+                "สลัด (t)": f"{r['jett']/1000:.1f}",
+                "Core": r["twr_note"],
+            } for r in tlog], use_container_width=True, hide_index=True)
+
+with col_obs:
+    with st.expander("📷 จุดสังเกตการณ์", expanded=True):
+        same = st.checkbox("ใช้พิกัดเดียวกับฐานปล่อย", value=False)
+        if same:
+            obs_lat, obs_lon, obs_alt = site_lat, site_lon, site_alt
+        else:
+            obs_lat = st.number_input("ละติจูดผู้ชม (°)", -90.0, 90.0,
+                                      13.6904, 0.0001, format="%.4f")
+            obs_lon = st.number_input("ลองจิจูดผู้ชม (°)", -180.0, 180.0,
+                                      101.0779, 0.0001, format="%.4f")
+            obs_alt = st.number_input("ความสูงผู้ชม (m)", -500.0, 5000.0, 5.0, 1.0)
+        min_el = st.slider("มุมเงยต่ำสุดที่มองเห็น (°)", 0.0, 30.0, 5.0, 0.5)
 
 cfg = dict(stages=stages_cfg, payload=payload, fairing_mass=fmass,
            fairing_alt=falt, site_lat=site_lat, site_lon=site_lon,
@@ -262,11 +259,11 @@ st.sidebar.download_button("💾 บันทึก preset",
                            "preset.json", "application/json",
                            use_container_width=True)
 
+run = st.sidebar.button("▶️ คำนวณจำลองการไต่", type="primary", use_container_width=True)
+
 # ============================================================
 # คำนวณ
 # ============================================================
-st.title("🚀 Rocket Ascent & Observation Planner")
-
 if run:
     with st.spinner("กำลังจำลองการไต่..."):
         veh = rp.Vehicle(
@@ -277,7 +274,7 @@ if run:
             payload=payload, fairing_mass=fmass, fairing_jettison_alt=falt*1e3)
         mis = rp.Mission(site_lat=site_lat, site_lon=site_lon, site_alt=site_alt,
                          target_alt=target_alt*1e3, target_inc=target_inc,
-                         launch_jd=jd, vertical_time=vt, kick_angle=ka,
+                         launch_jd=launch_jd, vertical_time=vt, kick_angle=ka,
                          kick_duration=kd, ascend_east=east)
         try:
             asc, st6, t_end, th0, azi = rp.simulate_ascent(
@@ -287,16 +284,15 @@ if run:
             el = rp.orbital_elements(orb6[0:3], orb6[3:6])
             orb = rp.propagate_orbit(orb6, t_ins, th0,
                                      duration=n_orbit*el["period_min"]*60, dt=15)
-            look = rp.look_angles(asc, obs_lat, obs_lon, obs_alt, jd, th0)
+            look = rp.look_angles(asc, obs_lat, obs_lon, obs_alt, launch_jd, th0)
             st.session_state["res"] = dict(asc=asc, orb=orb, look=look, el=el,
                                            azi=azi, dv=dv, t_end=t_end,
-                                           gross=veh.gross_mass(), jd=jd)
+                                           gross=veh.gross_mass(), jd=launch_jd)
         except Exception as e:
             st.error(f"คำนวณไม่สำเร็จ: {e}")
 
 if "res" not in st.session_state:
-    st.info("👈 ตั้งค่าในเมนูด้านซ้าย แล้วกด **คำนวณ**  \n"
-            "บนมือถือ: แตะไอคอน **»** มุมซ้ายบนเพื่อเปิดเมนู")
+    st.info("👈 ปรับแต่งจรวดและพิกัด จากนั้นกด **คำนวณจำลองการไต่** ในเมนูด้านซ้าย")
     st.stop()
 
 R = st.session_state["res"]
@@ -305,6 +301,7 @@ asc, orb, look, el = R["asc"], R["orb"], R["look"], R["el"]
 # ============================================================
 # TABS
 # ============================================================
+st.divider()
 t1, t2, t3, t4, t5 = st.tabs(
     ["📊 ภาพรวม", "📈 กราฟไต่", "🌍 Ground track", "📷 สำหรับช่างภาพ", "💾 ส่งออก"])
 
@@ -445,3 +442,4 @@ with t5:
                        "elements.json", "application/json",
                        use_container_width=True)
     st.caption("เปิด trajectory.kml ด้วย Google Earth เพื่อดูเส้นทางลอยเหนือแผนที่จริง")
+ 
