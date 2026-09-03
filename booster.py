@@ -60,7 +60,8 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
         ev.add(g["ignite_t"] + g["burn_time"])
         ev.add(g["ignite_t"] + g["burn_time"] + g["jettison_delay"])
         t_last = max(t_last, g["ignite_t"] + g["burn_time"] + g["jettison_delay"])
-    times = sorted(t for t in ev if -EPS <= t <= t_last + EPS)
+    t_last = max([T_core] + [g["ignite_t"] + g["burn_time"] + g["jettison_delay"] for g in groups])
+        times = sorted(t for t in ev if -EPS <= t <= t_last + EPS)
     rem_boost = sum(g["count"] * g["prop_mass"] for g in groups)
     phases, log = [], []
     for k in range(len(times) - 1):
@@ -72,6 +73,7 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
         core_on = tm < T_core - EPS
         burning = [g for g in groups if _is_burning(g, tm)]
         attached = [g for g in groups if _is_attached(g, tm)]
+        core_on = tm < T_core - EPS
         tau = _core_throttle(groups, tm, tau_b, tau_s) if core_on else 0.0
         F_sl = tau * core["thrust_sl"] + sum(g["count"] * g["thrust_sl"] for g in burning)
         F_vac = tau * core["thrust_vac"] + sum(g["count"] * g["thrust_vac"] for g in burning)
