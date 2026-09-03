@@ -410,7 +410,7 @@ def _two_body_j2(rv):
                                 j*r[2]*(5*zr**2-3)])
     return np.concatenate([v, a])
 
-def coast_and_circularize(state, t_end, target_alt, mission_type="circular", dt=1.0, max_coast=7200.0, verbose=True):
+def coast_and_circularize(state, t_end, target_alt, mission_type="circular", dt=1.0, max_coast=28800.0, verbose=True):
     if mission_type == "escape":
         return np.array(state), t_end, 0.0
     if mission_type == "elliptical":
@@ -492,7 +492,7 @@ def propagate_orbit(state6, t0, theta0, duration=6000.0, dt=15.0):
     n_steps = int(duration/dt) + 1
     for _ in range(n_steps):
         if np.linalg.norm(y[0:3]) < RE:
-        break
+            break
         lat, lon, alt = eci_to_geodetic(y[0:3], theta0 + OMEGA_E*(t0 + t))
         rows.append(dict(t=t0+t, x=y[0], y=y[1], z=y[2],
                          vx=y[3], vy=y[4], vz=y[5],
