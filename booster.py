@@ -61,7 +61,7 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
         ev.add(g["ignite_t"] + g["burn_time"] + g["jettison_delay"])
         t_last = max(t_last, g["ignite_t"] + g["burn_time"] + g["jettison_delay"])
     t_last = max([T_core] + [g["ignite_t"] + g["burn_time"] + g["jettison_delay"] for g in groups])
-        times = sorted(t for t in ev if -EPS <= t <= t_last + EPS)
+    times = sorted(t for t in ev if -EPS <= t <= t_last + EPS)
     rem_boost = sum(g["count"] * g["prop_mass"] for g in groups)
     phases, log = [], []
     for k in range(len(times) - 1):
@@ -122,4 +122,4 @@ def validate(core, groups, phases):
     if phases[0]["thrust_sl"] <= 0:
         warn.append("แรงขับเริ่มต้นเป็นศูนย์ — ตรวจ ignite_t ของ booster")
     return warn
-        
+
