@@ -354,7 +354,7 @@ asc, orb, look, el = R["asc"], R["orb"], R["look"], R["el"]
 
 if abs(el["apogee_km"] - target_alt) > 0.25*target_alt or el["perigee_km"] < 0:
     st.warning(f"⚠️ วงโคจรลัพธ์ (perigee {el['perigee_km']:.0f} × apogee {el['apogee_km']:.0f} km) "
-               f" lệchจากเป้า {target_alt:.0f} km มาก — ตรวจการตั้งค่า")
+               f" ห่างจากเป้า {target_alt:.0f} km มาก — ตรวจการตั้งค่า")
 
 # ============================================================
 # TABS
