@@ -342,7 +342,7 @@ if run:
                              s["dry_mass"], s["burn_time"], s["area"])
                     for s in stages_cfg],
             payload=payload, fairing_mass=fmass, fairing_jettison_alt=falt*1e3)
-         mis = rp.Mission(site_lat=site_lat, site_lon=site_lon, site_alt=site_alt,
+        mis = rp.Mission(site_lat=site_lat, site_lon=site_lon, site_alt=site_alt,
                          target_alt=target_alt*1e3, target_inc=target_inc,
                          launch_jd=launch_jd, vertical_time=vt, kick_angle=ka,
                          kick_duration=kd, ascend_east=east,
