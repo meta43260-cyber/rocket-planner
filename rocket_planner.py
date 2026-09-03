@@ -125,8 +125,8 @@ class Mission:
     kick_angle: float = 6.5
     kick_duration: float = 14.0
     ascend_east: bool = True
-      mission_type: str = "circular"       # circular / elliptical / escape
-      target_apogee_alt: float = 500e3     # apogee เป้า สำหรับ elliptical/escape
+    mission_type: str = "circular"       # circular / elliptical / escape
+    target_apogee_alt: float = 500e3     # apogee เป้า สำหรับ elliptical/escape
 
 
 # ============================================================
