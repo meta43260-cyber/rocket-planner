@@ -1,4 +1,4 @@
-"""
+True
 rocket_planner.py — Rocket Ascent, Orbit & Observation Engine
 3-DOF ascent (ECI) + J2 orbit propagation + look angles + airspace check
 
@@ -125,6 +125,8 @@ class Mission:
     kick_angle: float = 6.5
     kick_duration: float = 14.0
     ascend_east: bool = True
+      mission_type: str = "circular"       # circular / elliptical / escape
+      target_apogee_alt: float = 500e3     # apogee เป้า สำหรับ elliptical/escape
 
 
 # ============================================================
@@ -241,6 +243,8 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
     t_sep = None
     fpa_sep = None
     target_r = RE + mission.target_alt
+    if mission.mission_type != "circular":
+         target_r = RE + mission.target_apogee_alt
 
     rows, next_out = [], 0.0
 
@@ -404,10 +408,11 @@ def _two_body_j2(rv):
                                 j*r[2]*(5*zr**2-3)])
     return np.concatenate([v, a])
 
-
-def coast_and_circularize(state, t_end, target_alt, dt=1.0,
-                          max_coast=7200.0, verbose=True):
-    """ปล่อยไหลถึง apogee แล้วเผาเป็นวงกลม — คืน (state6, t_insertion, dv)"""
+def coast_and_circularize(state, t_end, target_alt, mission_type="circular", dt=1.0, max_coast=7200.0, verbose=True):
+    if mission_type == "escape":
+        return np.array(state), t_end, 0.0
+    if mission_type == "elliptical":
+        return np.array(state), t_end, 0.0
     y = np.array(state, dtype=float)
     t = 0.0
     target_r = RE + target_alt
