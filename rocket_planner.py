@@ -277,7 +277,7 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
         vh = vv - np.dot(vv, up)*up
         nvh = np.linalg.norm(vh)
         vh = vh/nvh if nvh > 1.0 else horiz
-        Tref = max(0.55*stages[idx].burn_time, 40.0)
+        Tref = max(0.9*sum(st.burn_time for st in stages[idx:]), 40.0)
         tau = np.clip((tt - t_sep)/Tref, 0.0, 1.0) if t_sep else 0.0
         g_cmd = max(fpa_sep*(1.0 - tau), 0.0) if fpa_sep else 0.0
         return np.cos(g_cmd)*vh + np.sin(g_cmd)*up
@@ -415,7 +415,7 @@ def periapsis_radius(r, v):
     e_vec = np.cross(v, h)/MU - r/rn
     return a*(1 - np.linalg.norm(e_vec))
 
-# ============================================================
+    # ============================================================
 # COAST + CIRCULARIZE
 # ============================================================
 def _two_body_j2(rv):
@@ -700,7 +700,6 @@ def _seg_row(name, seg):
 
                 alt_min_km=min(alts), alt_max_km=max(alts))
 
-
 # ============================================================
 
 # DEMO
@@ -742,3 +741,4 @@ if __name__ == "__main__":
     look = look_angles(asc, 28.40, -80.60, 5, m.launch_jd, th0)
 
     print(photo_report(look, 5.0))
+    
