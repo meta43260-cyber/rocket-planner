@@ -359,9 +359,15 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
                 stage=stages[idx].name if idx < len(stages) else "coast"))
             next_out += dt_out
 
-        # ---- ตัดเครื่องเมื่อ apogee ถึงเป้าหมาย ----
+        # ---- ตัดเครื่องเมื่อวงโคจรถึงเป้าหมาย ----
         if idx >= 1 and alt > 60000:
-            if apoapsis_radius(state[0:3], state[3:6]) >= target_r:
+            apo_ok = apoapsis_radius(state[0:3], state[3:6]) >= target_r
+            if mission.mission_type == "elliptical":
+                # ต้องเช็ค periapsis ด้วย ไม่งั้นได้วงรีที่จมพื้นโลก (perigee ติดลบ)
+                peri_ok = periapsis_radius(state[0:3], state[3:6]) >= RE + mission.target_alt
+                if apo_ok and peri_ok:
+                    break
+            elif apo_ok:
                 break
 
         # ---- RK4 ----
@@ -396,6 +402,18 @@ def apoapsis_radius(r, v):
     e_vec = np.cross(v, h)/MU - r/rn
     return a*(1 + np.linalg.norm(e_vec))
 
+
+def periapsis_radius(r, v):
+    """รัศมี periapsis ของวงโคจรปัจจุบัน (คืนค่าติดลบมาก ๆ ถ้าเป็น hyperbolic/escape)"""
+    rn = np.linalg.norm(r)
+    vn2 = float(np.dot(v, v))
+    energy = vn2/2 - MU/rn
+    if energy >= 0:
+        return -1e12
+    a = -MU/(2*energy)
+    h = np.cross(r, v)
+    e_vec = np.cross(v, h)/MU - r/rn
+    return a*(1 - np.linalg.norm(e_vec))
 
 # ============================================================
 # COAST + CIRCULARIZE
@@ -588,7 +606,6 @@ def photo_report(look: pd.DataFrame, min_elev: float = 5.0) -> str:
 
     return "\n".join(L)
 
-
 # ============================================================
 
 # AIRSPACE CROSSINGS
@@ -725,4 +742,3 @@ if __name__ == "__main__":
     look = look_angles(asc, 28.40, -80.60, 5, m.launch_jd, th0)
 
     print(photo_report(look, 5.0))
-    
