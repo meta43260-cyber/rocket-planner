@@ -314,7 +314,9 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
 
         burning = idx < len(stages) and prop_left[idx] > 0.0 \
                   and stage_time[idx] < stages[idx].burn_time
-        if idx < len(stages) and not burning and prop_left[idx] <= 0.0:
+        if idx < len(stages) and not burning and (
+                prop_left[idx] <= 0.0 or
+                stage_time[idx] >= stages[idx].burn_time - 1e-9):
             if idx + 1 < len(stages):
                 idx += 1
                 t_sep = t
