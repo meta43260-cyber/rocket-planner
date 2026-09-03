@@ -191,8 +191,24 @@ with st.sidebar.expander("📍 ฐานปล่อย", expanded=True):
                                float(base["site_alt"]), 1.0)
 
 with st.sidebar.expander("🎯 วงโคจรเป้าหมาย", expanded=True):
-    target_alt = st.number_input("ความสูงวงโคจร (km)", 120.0, 2000.0,
-                                 float(base["target_alt"]), 10.0)
+    mission_type = st.selectbox("ประเภทวงโคจร", ["circular", "elliptical", "escape"],
+                                 format_func=lambda x: {"circular": "วงกลม (LEO)",
+                                                        "elliptical": "วงรี (GTO/GEO transfer)",
+                                                        "escape": "escape (TLI)"}[x])
+    if mission_type == "circular":
+        target_alt = st.number_input("ความสูงวงโคจร (km)", 120.0, 2000.0,
+                                     float(base["target_alt"]), 10.0)
+        target_apogee_alt = target_alt
+    elif mission_type == "elliptical":
+        target_alt = st.number_input("ความสูง perigee (km)", 120.0, 2000.0,
+                                     float(base["target_alt"]), 10.0)
+        target_apogee_alt = st.number_input("ความสูง apogee เป้าหมาย (km)",
+                                            1000.0, 100000.0, 35786.0, 100.0)
+    else:
+        target_alt = st.number_input("ความสูงเริ่มต้น (km)", 120.0, 2000.0,
+                                     float(base["target_alt"]), 10.0)
+        target_apogee_alt = st.number_input("ความสูงเป้าหมาย (km)",
+                                            1000.0, 1000000.0, 384400.0, 1000.0)
     target_inc = st.number_input("ความเอียง (°)", 0.0, 180.0,
                                  float(base["target_inc"]), 0.1)
     east = st.checkbox("ยิงไปทางตะวันออก (ascending)", value=True)
@@ -329,12 +345,14 @@ if run:
         mis = rp.Mission(site_lat=site_lat, site_lon=site_lon, site_alt=site_alt,
                          target_alt=target_alt*1e3, target_inc=target_inc,
                          launch_jd=launch_jd, vertical_time=vt, kick_angle=ka,
-                         kick_duration=kd, ascend_east=east)
+                         kick_duration=kd, ascend_east=east,
+                         mission_type=mission_type,
+                         target_apogee_alt=target_apogee_alt*1e3)
         try:
             asc, st6, t_end, th0, azi = rp.simulate_ascent(
                 veh, mis, dt=dt, dt_out=0.5, verbose=False)
             orb6, t_ins, dv = rp.coast_and_circularize(
-                st6, t_end, mis.target_alt, verbose=False)
+                st6, t_end, mis.target_alt, mission_type=mission_type, verbose=False)
             el = rp.orbital_elements(orb6[0:3], orb6[3:6])
             orb = rp.propagate_orbit(orb6, t_ins, th0,
                                      duration=n_orbit*el["period_min"]*60, dt=15)
@@ -372,10 +390,13 @@ with t1:
     c[3].metric("G สูงสุด", f"{asc['acc_g'].max():.2f} g")
     c = st.columns(4)
     c[0].metric("Perigee", f"{el['perigee_km']:.1f} km")
-    c[1].metric("Apogee", f"{el['apogee_km']:.1f} km")
+    if el['e'] >= 1.0:
+        c[1].metric("Apogee", "∞ (escape)")
+        c[3].metric("คาบโคจร", "∞")
+    else:
+        c[1].metric("Apogee", f"{el['apogee_km']:.1f} km")
+        c[3].metric("คาบโคจร", f"{el['period_min']:.1f} min")
     c[2].metric("ความเอียง", f"{el['inc_deg']:.2f}°")
-    c[3].metric("คาบโคจร", f"{el['period_min']:.1f} min")
-    c = st.columns(4)
     c[0].metric("Azimuth (หมุนตามโลก)", f"{R['azi'][0]:.1f}°")
     c[1].metric("Azimuth (เฉื่อย)", f"{R['azi'][1]:.1f}°")
     c[2].metric("โบนัสจากโลกหมุน", f"{R['azi'][2]:.0f} m/s")
