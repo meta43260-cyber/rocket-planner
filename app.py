@@ -370,7 +370,9 @@ if "res" not in st.session_state:
 R = st.session_state["res"]
 asc, orb, look, el = R["asc"], R["orb"], R["look"], R["el"]
 
-if abs(el["apogee_km"] - target_alt) > 0.25*target_alt or el["perigee_km"] < 0:
+if mission_type == "escape" and el["e"] < 1.0:
+    st.warning("⚠️ พลังงานยังไม่พอหลุดพ้นโลก (e < 1) — ยังเป็นวงรีปิด ไม่ใช่ escape trajectory")
+elif abs(el["apogee_km"] - target_alt) > 0.25*target_alt or el["perigee_km"] < 0:
     st.warning(f"⚠️ วงโคจรลัพธ์ (perigee {el['perigee_km']:.0f} × apogee {el['apogee_km']:.0f} km) "
                f" ห่างจากเป้า {target_alt:.0f} km มาก — ตรวจการตั้งค่า")
 
@@ -515,3 +517,4 @@ with t5:
     st.download_button("⬇️ elements.json", json.dumps(el, indent=2).encode(),
                        "elements.json", "application/json", use_container_width=True)
     st.caption("เปิด trajectory.kml ด้วย Google Earth เพื่อดูเส้นทางลอยเหนือแผนที่จริง")  
+        
