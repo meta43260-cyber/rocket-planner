@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import streamlit as st
 
-import rocket-planner as rp
+import rocket_planner as rp
 import booster as bst
 
 # ============================================================
