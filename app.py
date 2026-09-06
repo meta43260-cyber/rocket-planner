@@ -1,12 +1,10 @@
 """
 app.py — Streamlit UI สำหรับ rocket_planner
 รัน: streamlit run app.py
-[FIX] ฟอนต์ไทยในกราฟ matplotlib + ป้ายอังกฤษอัตโนมัติเมื่อไม่มีฟอนต์
 """
 import json
 import os
 import urllib.request
-
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -14,12 +12,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import streamlit as st
-
 import rocket_planner as rp
 import booster as bst
 
 # ============================================================
-# ฟอนต์ไทยสำหรับ matplotlib (แก้ป้าย "ททททท")
+# ฟอนต์ไทยสำหรับ matplotlib
 # ============================================================
 def _setup_thai_font():
     names = {f.name for f in fm.fontManager.ttflist}
@@ -36,8 +33,9 @@ def _setup_thai_font():
         return None
     p = os.path.join(d, "NotoSansThai.ttf")
     if not os.path.exists(p):
-        urls = ["https://raw.githubusercontent.com/google/fonts/main/ofl/notosansthai/NotoSansThai%5Bwdth%2Cwght%5D.ttf",
-                "https://github.com/google/fonts/raw/main/ofl/notosansthai/NotoSansThai%5Bwdth%2Cwght%5D.ttf"]
+        urls = [
+            "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansthai/NotoSansThai%5Bwdth%2Cwght%5D.ttf",
+            "https://github.com/google/fonts/raw/main/ofl/notosansthai/NotoSansThai%5Bwdth%2Cwght%5D.ttf"]
         for u in urls:
             try:
                 req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
@@ -59,7 +57,7 @@ THAI_FONT = _setup_thai_font()
 THAI_OK = THAI_FONT is not None
 if THAI_OK:
     plt.rcParams["font.family"] = THAI_FONT
-plt.rcParams["axes.unicode_minus"] = False
+    plt.rcParams["axes.unicode_minus"] = False
 
 def T(thai, eng):
     return thai if THAI_OK else eng
@@ -135,8 +133,8 @@ def jd_from_date(y, mo, d, hh, mm, ss):
         y, mo = y - 1, mo + 12
     A = y // 100
     B = 2 - A + A // 4
-    jd = int(365.25*(y + 4716)) + int(30.6001*(mo + 1)) + d + B - 1524.5
-    return jd + (hh + mm/60.0 + ss/3600.0)/24.0
+    jd = int(365.25 * (y + 4716)) + int(30.6001 * (mo + 1)) + d + B - 1524.5
+    return jd + (hh + mm / 60.0 + ss / 3600.0) / 24.0
 
 def make_kml(df, name="Trajectory", color="ff00aaff"):
     pts = "\n".join(f"{r.lon:.6f},{r.lat:.6f},{r.alt_km*1000:.1f}"
@@ -155,14 +153,14 @@ def make_kml(df, name="Trajectory", color="ff00aaff"):
 def split_dateline(lat, lon):
     segs, s_lat, s_lon = [], [lat[0]], [lon[0]]
     for i in range(1, len(lon)):
-        if abs(lon[i] - lon[i-1]) > 180:
+        if abs(lon[i] - lon[i - 1]) > 180:
             segs.append((s_lat, s_lon))
             s_lat, s_lon = [], []
         s_lat.append(lat[i]); s_lon.append(lon[i])
     segs.append((s_lat, s_lon))
     return segs
-    
-   # ============================================================
+
+# ============================================================
 # SIDEBAR
 # ============================================================
 st.sidebar.title("🚀 ภารกิจและวงโคจร")
@@ -192,9 +190,9 @@ with st.sidebar.expander("📍 ฐานปล่อย", expanded=True):
 
 with st.sidebar.expander("🎯 วงโคจรเป้าหมาย", expanded=True):
     mission_type = st.selectbox("ประเภทวงโคจร", ["circular", "elliptical", "escape"],
-                                 format_func=lambda x: {"circular": "วงกลม (LEO)",
-                                                        "elliptical": "วงรี (GTO/GEO transfer)",
-                                                        "escape": "escape (TLI)"}[x])
+                                format_func=lambda x: {"circular": "วงกลม (LEO)",
+                                                       "elliptical": "วงรี (GTO/GEO transfer)",
+                                                       "escape": "escape (TLI)"}[x])
     if mission_type == "circular":
         target_alt = st.number_input("ความสูงวงโคจร (km)", 120.0, 2000.0,
                                      float(base["target_alt"]), 10.0)
@@ -225,9 +223,14 @@ with st.sidebar.expander("🕐 เวลาปล่อย (UTC)"):
     st.caption(f"JD = {launch_jd:.5f}")
 
 with st.sidebar.expander("🛩️ โปรไฟล์การไต่"):
-    vt = st.slider("ไต่ตรง (s)", 0.0, 30.0, float(base["vertical_time"]), 0.5)
-    ka = st.slider("มุม pitch kick (°)", 0.0, 20.0, float(base["kick_angle"]), 0.1)
-    kd = st.slider("ระยะเวลา kick (s)", 1.0, 40.0, float(base["kick_duration"]), 0.5)
+    auto_prof = st.checkbox("🪄 โหมดอัตโนมัติ (แนะนำเมื่อไม่รู้โปรไฟล์จริง)", value=True)
+    if auto_prof:
+        st.caption("ระบบคำนวณเวลาไต่ตรง/มุม kick จาก TWR + closed-loop guidance")
+        vt = ka = kd = 0.0
+    else:
+        vt = st.slider("ไต่ตรง (s)", 0.0, 30.0, float(base["vertical_time"]), 0.5)
+        ka = st.slider("มุม pitch kick (°)", 0.0, 20.0, float(base["kick_angle"]), 0.1)
+        kd = st.slider("ระยะเวลา kick (s)", 1.0, 40.0, float(base["kick_duration"]), 0.5)
 
 with st.sidebar.expander("⚙️ ความละเอียด"):
     dt = st.select_slider("timestep (s)", [0.02, 0.05, 0.1, 0.2], value=0.05)
@@ -240,7 +243,7 @@ st.title("🚀 Rocket Ascent & Observation Planner")
 col_veh, col_obs = st.columns([2, 1])
 
 with col_veh:
-    with st.expander("🛰️ ยานพาหนะและสเตจ (Vehicle Setup)", expanded=True):
+    with st.expander("🛰️ ยานพาหนะและสเตจ", expanded=True):
         c_p, c_f, c_a = st.columns(3)
         payload = c_p.number_input("Payload (kg)", 0.0, 100000.0, float(base["payload"]), 10.0)
         fmass = c_f.number_input("Fairing (kg)", 0.0, 10000.0, float(base["fairing_mass"]), 10.0)
@@ -261,17 +264,25 @@ with col_veh:
             m_d = c6.number_input("มวลแห้ง (kg)", 10.0, 2e5, float(d["dry_mass"]), 10.0, key=f"md{i}")
             b_t = c7.number_input("เวลาเผาสูงสุด (s)", 5.0, 1000.0, float(d["burn_time"]), 1.0, key=f"bt{i}")
             ar = c8.number_input("พื้นที่หน้าตัด (m²)", 0.1, 100.0, float(d["area"]), 0.01, key=f"ar{i}")
+            ig_d = st.number_input(
+                f"⏱️ หน่วงจุดเครื่องหลังแยก (coast, s) — สเตจ {i+1}",
+                0.0, 7200.0, float(d.get("ignition_delay", 0.0)), 1.0, key=f"igd{i}",
+                help="0=จุดทันที, >0=เว้นช่วงโคจรก่อนจุด")
             stages_cfg.append(dict(name=f"Stage {i+1}", thrust_sl=t_sl, thrust_vac=t_vc,
                                    isp_sl=i_sl, isp_vac=i_vc, prop_mass=m_p,
-                                   dry_mass=m_d, burn_time=b_t, area=ar))
+                                   dry_mass=m_d, burn_time=b_t, area=ar,
+                                   ignition_delay=ig_d))
+        logical_stages = [dict(s) for s in stages_cfg]
+
     with st.expander("🧨 Side booster (strap-on)", expanded=False):
         bb = base.get("boost", {})
         use_b = st.checkbox("ติด booster ข้าง", value=bool(base.get("use_boost", False)))
         groups = []
+        phases = []
         if use_b:
             ng = st.number_input("จำนวนกลุ่ม booster", 1, 4, int(bb.get("cnt", 1)), 1)
             for i in range(int(ng)):
-                st.markdown(f"**— กลุ่มที่ {i+1} —**")
+                st.markdown(f"— กลุ่มที่ {i+1} —")
                 c1, c2 = st.columns(2)
                 nm = c1.text_input("ชื่อ", f"SRB-{i+1}", key=f"bn{i}")
                 cnt = c2.number_input("จำนวนตัว", 1, 12, int(bb.get("cnt", 2)), key=f"bc{i}")
@@ -310,6 +321,40 @@ with col_veh:
                 "Core": r["twr_note"],
             } for r in tlog], use_container_width=True, hide_index=True)
 
+    # ---------- Timeline จากภารกิจจริง ----------
+    with st.expander("📅 Timeline จากภารกิจจริง (ถ้ามีเผยแพร่)"):
+        use_tl = st.checkbox("บังคับการจำลองตาม timeline", value=False,
+                             help="ใช้เมื่อทราบเวลาเหตุการณ์จริง")
+        tl = []
+        fair_tl = 160.0
+        if use_tl:
+            st.caption("ใส่เวลา T+ (วินาที) — ระบบแปลงเป็นเวลาเผาและช่วง coast ให้อัตโนมัติ")
+            t_cur, defs = 0.0, []
+            for s in logical_stages[:int(nstage)]:
+                ign = t_cur + float(s.get("ignition_delay", 0.0))
+                cut = ign + float(s["burn_time"])
+                sep = cut + 2.0
+                defs.append((ign, cut, sep))
+                t_cur = sep
+            for i in range(int(nstage)):
+                c1, c2, c3 = st.columns(3)
+                lab = "ปล่อยสัมภาระ" if i == int(nstage) - 1 else "แยกสเตจ"
+                ign_i = c1.number_input(f"S{i+1} จุดเครื่อง (T+ s)", 0.0, 100000.0,
+                                        float(defs[i][0]), 1.0, key=f"tl_ign{i}")
+                cut_i = c2.number_input(f"S{i+1} ดับเครื่อง (T+ s)", 0.0, 100000.0,
+                                        float(defs[i][1]), 1.0, key=f"tl_cut{i}")
+                sep_i = c3.number_input(f"S{i+1} {lab} (T+ s)", 0.0, 100000.0,
+                                        float(defs[i][2]), 1.0, key=f"tl_sep{i}")
+                tl.append((ign_i, cut_i, sep_i))
+            fair_tl = st.number_input("ปลด fairing (T+ s)", 0.0, 100000.0, 160.0, 1.0, key="tl_fair")
+            for i, (a_, b_, c_) in enumerate(tl):
+                if b_ <= a_:
+                    st.warning(f"สเตจ {i+1}: เวลาดับเครื่องต้องอยู่หลังเวลาจุดเครื่อง")
+                if c_ < b_:
+                    st.warning(f"สเตจ {i+1}: เวลาแยก/ปล่อยสัมภาระต้องไม่เร็วกว่าดับเครื่อง")
+                if i > 0 and a_ < tl[i - 1][2]:
+                    st.warning(f"สเตจ {i+1}: จุดเครื่องก่อนการแยกสเตจ {i}")
+
 with col_obs:
     with st.expander("📷 จุดสังเกตการณ์", expanded=True):
         same = st.checkbox("ใช้พิกัดเดียวกับฐานปล่อย", value=False)
@@ -324,7 +369,8 @@ with col_obs:
 cfg = dict(stages=stages_cfg, payload=payload, fairing_mass=fmass,
            fairing_alt=falt, site_lat=site_lat, site_lon=site_lon,
            site_alt=site_alt, target_alt=target_alt, target_inc=target_inc,
-           vertical_time=vt, kick_angle=ka, kick_duration=kd)
+           vertical_time=vt, kick_angle=ka, kick_duration=kd,
+           auto_profile=auto_prof)
 st.sidebar.download_button("💾 บันทึก preset",
                            json.dumps(cfg, indent=2, ensure_ascii=False),
                            "preset.json", "application/json",
@@ -336,30 +382,60 @@ run = st.sidebar.button("▶️ คำนวณจำลองการไต่
 # ============================================================
 if run:
     with st.spinner("กำลังจำลองการไต่..."):
+        stages_sim = [dict(s) for s in stages_cfg]
+        fair_t_val, pay_t_val, max_time = None, None, 2000.0
+        if use_tl and tl:
+            if use_b:
+                st.info("Timeline + booster: ใช้ timeline ตั้งแต่สเตจ 2 ขึ้นไป")
+            for i in range(int(nstage)):
+                if use_b and i == 0:
+                    continue
+                si = (len(phases) + i - 1) if use_b else i
+                ign_i, cut_i, sep_i = tl[i]
+                s = stages_sim[si]
+                s["burn_time"] = max(cut_i - ign_i, 0.1)
+                if i > 0:
+                    s["ignition_delay"] = max(ign_i - tl[i - 1][2], 0.0)
+                need = (s["thrust_vac"] * 1e3 / (rp.G0 * s["isp_vac"])) * s["burn_time"]
+                if need > s["prop_mass"] * 1.02:
+                    st.warning(f"⚠️ สเตจ {i+1}: timeline ต้องการเชื้อเพลิง ~{need/1000:.1f} t "
+                               f"แต่ตั้งไว้ {s['prop_mass']/1000:.1f} t")
+            fair_t_val = float(fair_tl)
+            pay_t_val = float(tl[-1][2])
+            max_time = max(2000.0, pay_t_val + 1800.0)
+
         veh = rp.Vehicle(
-            stages=[rp.Stage(s["name"], s["thrust_sl"]*1e3, s["thrust_vac"]*1e3,
+            stages=[rp.Stage(s["name"], s["thrust_sl"] * 1e3, s["thrust_vac"] * 1e3,
                              s["isp_sl"], s["isp_vac"], s["prop_mass"],
-                             s["dry_mass"], s["burn_time"], s["area"])
-                    for s in stages_cfg],
-            payload=payload, fairing_mass=fmass, fairing_jettison_alt=falt*1e3)
+                             s["dry_mass"], s["burn_time"], s["area"],
+                             ignition_delay=float(s.get("ignition_delay", 0.0)))
+                    for s in stages_sim],
+            payload=payload, fairing_mass=fmass,
+            fairing_jettison_alt=falt * 1e3,
+            fairing_jettison_t=fair_t_val,
+            payload_deploy_t=pay_t_val)
         mis = rp.Mission(site_lat=site_lat, site_lon=site_lon, site_alt=site_alt,
-                         target_alt=target_alt*1e3, target_inc=target_inc,
+                         target_alt=target_alt * 1e3, target_inc=target_inc,
                          launch_jd=launch_jd, vertical_time=vt, kick_angle=ka,
                          kick_duration=kd, ascend_east=east,
                          mission_type=mission_type,
-                         target_apogee_alt=target_apogee_alt*1e3)
+                         target_apogee_alt=target_apogee_alt * 1e3,
+                         auto_profile=auto_prof)
         try:
             asc, st6, t_end, th0, azi = rp.simulate_ascent(
-                veh, mis, dt=dt, dt_out=0.5, verbose=False)
+                veh, mis, dt=dt, dt_out=0.5, max_time=max_time, verbose=False)
             orb6, t_ins, dv = rp.coast_and_circularize(
                 st6, t_end, mis.target_alt, mission_type=mission_type, verbose=False)
             el = rp.orbital_elements(orb6[0:3], orb6[3:6])
-            orb = rp.propagate_orbit(orb6, t_ins, th0,
-                                     duration=n_orbit*el["period_min"]*60, dt=15)
+            dur = 6 * 3600.0 if el["e"] >= 1.0 else n_orbit * el["period_min"] * 60
+            orb = rp.propagate_orbit(orb6, t_ins, th0, duration=dur, dt=15)
             look = rp.look_angles(asc, obs_lat, obs_lon, obs_alt, launch_jd, th0)
+            prof = rp.auto_ascent_profile(veh, mis) if auto_prof else (vt, ka, kd)
             st.session_state["res"] = dict(asc=asc, orb=orb, look=look, el=el,
                                            azi=azi, dv=dv, t_end=t_end,
-                                           gross=veh.gross_mass(), jd=launch_jd)
+                                           gross=veh.gross_mass(), jd=launch_jd,
+                                           auto_prof=auto_prof, prof=list(prof),
+                                           fair_t=fair_t_val, pay_t=pay_t_val, falt=falt)
         except Exception as e:
             st.error(f"คำนวณไม่สำเร็จ: {e}")
 
@@ -371,10 +447,14 @@ R = st.session_state["res"]
 asc, orb, look, el = R["asc"], R["orb"], R["look"], R["el"]
 
 if mission_type == "escape" and el["e"] < 1.0:
-    st.warning("⚠️ พลังงานยังไม่พอหลุดพ้นโลก (e < 1) — ยังเป็นวงรีปิด ไม่ใช่ escape trajectory")
-elif abs(el["apogee_km"] - target_alt) > 0.25*target_alt or el["perigee_km"] < 0:
-    st.warning(f"⚠️ วงโคจรลัพธ์ (perigee {el['perigee_km']:.0f} × apogee {el['apogee_km']:.0f} km) "
-               f" ห่างจากเป้า {target_alt:.0f} km มาก — ตรวจการตั้งค่า")
+    st.warning("⚠️ พลังงานยังไม่พอหลุดพ้นโลก (e < 1)")
+elif el["e"] >= 1.0:
+    st.success("🌌 หลุดพ้นแรงโน้มถ่วงโลกแล้ว (escape trajectory, e ≥ 1)")
+else:
+    ref_apo = target_apogee_alt if mission_type == "elliptical" else target_alt
+    if abs(el["apogee_km"] - ref_apo) > 0.25 * ref_apo or el["perigee_km"] < 0:
+        st.warning(f"⚠️ วงโคจรลัพธ์ (perigee {el['perigee_km']:.0f} × apogee {el['apogee_km']:.0f} km) "
+                   f"ห่างจากเป้า {ref_apo:.0f} km มาก")
 
 # ============================================================
 # TABS
@@ -403,18 +483,44 @@ with t1:
     c[1].metric("Azimuth (เฉื่อย)", f"{R['azi'][1]:.1f}°")
     c[2].metric("โบนัสจากโลกหมุน", f"{R['azi'][2]:.0f} m/s")
     c[3].metric("Δv วงกลม", f"{R['dv']:.0f} m/s")
+
+    if R.get("auto_prof"):
+        p0, p1, p2 = R["prof"]
+        st.info(f"🪄 โปรไฟล์ไต่อัตโนมัติ: ไต่ตรง {p0:.1f} s → kick {p1:.1f}° × {p2:.1f} s "
+                f"→ gravity turn + closed-loop")
+
     st.markdown("### ลำดับเหตุการณ์")
     ev = []
-    for s in asc["stage"].unique():
+    names = [s for s in asc["stage"].unique() if s != "coast"]
+    first = names[0] if names else None
+    for s in names:
         sub = asc[asc["stage"] == s]
-        ev.append(dict(เหตุการณ์=f"{s} จุดติด", **{
-            "T+ (s)": round(sub['t'].iloc[0], 1),
-            "alt (km)": round(sub['alt_km'].iloc[0], 1),
-            "v (m/s)": round(sub['v_relative'].iloc[0], 0)}))
-        ev.append(dict(เหตุการณ์=f"{s} ดับ", **{
-            "T+ (s)": round(sub['t'].iloc[-1], 1),
-            "alt (km)": round(sub['alt_km'].iloc[-1], 1),
-            "v (m/s)": round(sub['v_relative'].iloc[-1], 0)}))
+        on = sub[sub["thrust_kN"] > 0.1]
+        if s != first:
+            r0 = sub.iloc[0]
+            ev.append({"เหตุการณ์": f"{s} — แยก", "T+ (s)": round(r0.t, 1),
+                        "alt (km)": round(r0.alt_km, 1), "v (m/s)": round(r0.v_relative, 0)})
+        if not on.empty:
+            ri = on.iloc[0]
+            ev.append({"เหตุการณ์": f"{s} — จุดเครื่อง", "T+ (s)": round(ri.t, 1),
+                        "alt (km)": round(ri.alt_km, 1), "v (m/s)": round(ri.v_relative, 0)})
+            rc = on.iloc[-1]
+            ev.append({"เหตุการณ์": f"{s} — ดับเครื่อง", "T+ (s)": round(rc.t, 1),
+                        "alt (km)": round(rc.alt_km, 1), "v (m/s)": round(rc.v_relative, 0)})
+    if R.get("fair_t") is not None:
+        rw = asc.loc[(asc["t"] - R["fair_t"]).abs().idxmin()]
+        ev.append({"เหตุการณ์": "ปลด fairing (timeline)", "T+ (s)": round(rw.t, 1),
+                    "alt (km)": round(rw.alt_km, 1), "v (m/s)": round(rw.v_relative, 0)})
+    else:
+        off = asc[asc["alt_km"] >= R.get("falt", 110.0)]
+        if not off.empty:
+            rw = off.iloc[0]
+            ev.append({"เหตุการณ์": "ปลด fairing (ความสูง)", "T+ (s)": round(rw.t, 1),
+                        "alt (km)": round(rw.alt_km, 1), "v (m/s)": round(rw.v_relative, 0)})
+    if R.get("pay_t") is not None:
+        rw = asc.loc[(asc["t"] - R["pay_t"]).abs().idxmin()]
+        ev.append({"เหตุการณ์": "ปล่อยสัมภาระ", "T+ (s)": round(rw.t, 1),
+                    "alt (km)": round(rw.alt_km, 1), "v (m/s)": round(rw.v_relative, 0)})
     mq = asc.loc[asc["q_kPa"].idxmax()]
     ev.append({"เหตุการณ์": "Max-Q", "T+ (s)": round(mq.t, 1),
                "alt (km)": round(mq.alt_km, 1), "v (m/s)": round(mq.v_relative, 0)})
@@ -422,6 +528,18 @@ with t1:
                  use_container_width=True, hide_index=True)
 
 with t2:
+    ts_, th_ = asc["t"].values, asc["thrust_kN"].values
+    coast_segs, s0_ = [], None
+    for i in range(len(ts_)):
+        if th_[i] <= 0 and s0_ is None:
+            s0_ = ts_[i]
+        elif th_[i] > 0 and s0_ is not None:
+            if ts_[i] - s0_ > 2.0:
+                coast_segs.append((s0_, ts_[i]))
+            s0_ = None
+    if s0_ is not None and ts_[-1] - s0_ > 2.0:
+        coast_segs.append((s0_, ts_[-1]))
+
     fig, ax = plt.subplots(2, 2, figsize=(11, 7))
     ax[0, 0].plot(asc["t"], asc["alt_km"], lw=2)
     ax[0, 0].set_title(T("ความสูง", "Altitude")); ax[0, 0].set_ylabel(T("km", "km"))
@@ -434,17 +552,25 @@ with t2:
     ax[1, 0].set_ylabel(T("kPa", "kPa"))
     ax[1, 1].plot(asc["t"], asc["fpa_deg"], lw=2, color="green")
     ax[1, 1].axhline(0, color="gray", lw=0.8)
-    ax[1, 1].set_title(T("มุมวิถีบิน (Flight path angle)", "Flight path angle"))
+    ax[1, 1].set_title(T("มุมวิถีบิน", "Flight path angle"))
     ax[1, 1].set_ylabel(T("°", "deg"))
     for a in ax.flat:
         a.grid(alpha=0.3); a.set_xlabel(T("T+ (s)", "T+ (s)"))
     fig.tight_layout()
     st.pyplot(fig, use_container_width=True)
+
     fig2, a2 = plt.subplots(figsize=(11, 3))
     a2.plot(asc["t"], asc["mach"], lw=2, color="purple")
     a2.axhline(1, color="red", ls="--", lw=1, label=T("Mach 1", "Mach 1"))
     a2.set_xlabel(T("T+ (s)", "T+ (s)")); a2.set_ylabel(T("Mach", "Mach"))
     a2.grid(alpha=0.3); a2.legend()
+
+    for a in list(ax.flat) + [a2]:
+        for j, (u0, u1) in enumerate(coast_segs):
+            a.axvspan(u0, u1, color="gray", alpha=0.15,
+                      label=T("coast", "coast") if j == 0 else None)
+        if coast_segs:
+            a.legend(fontsize=7)
     st.pyplot(fig2, use_container_width=True)
 
 with t3:
@@ -462,6 +588,7 @@ with t3:
     ax.set_ylabel(T("ละติจูด (°)", "Latitude (deg)"))
     ax.set_title(T(f"Ground track — {n_orbit} รอบ", f"Ground track — {n_orbit} orbits"))
     st.pyplot(fig, use_container_width=True)
+
     st.markdown(T("### เส้นทางช่วงไต่ (ซูม)", "### Ascent track (zoom)"))
     fig3, a3 = plt.subplots(figsize=(11, 4))
     sc = a3.scatter(asc["lon"], asc["lat"], c=asc["alt_km"], cmap="plasma", s=8)
@@ -486,6 +613,7 @@ with t4:
             a.grid(alpha=0.3); a.set_xlabel(T("T+ (s)", "T+ (s)"))
         fig.tight_layout()
         st.pyplot(fig, use_container_width=True)
+
         st.markdown(T("### แผนผังท้องฟ้า (polar)", "### Sky map (polar)"))
         figp = plt.figure(figsize=(5.5, 5.5))
         ap = figp.add_subplot(111, projection="polar")
@@ -496,6 +624,7 @@ with t4:
         ap.set_xticklabels(["N", "NE", "E", "SE", "S", "SW", "W", "NW"])
         ap.grid(alpha=0.4)
         st.pyplot(figp, use_container_width=False)
+
         st.markdown(T("### ตารางมุมเล็ง (ทุก 10 วินาที)", "### Look angles (every 10 s)"))
         tb = vis[vis["t"] % 10 < 0.6][
             ["t", "az_deg", "el_deg", "range_km", "alt_km", "angular_rate"]].copy()
@@ -514,7 +643,8 @@ with t5:
     c2.download_button("⬇️ trajectory.kml", make_kml(asc, "Ascent").encode(),
                        "trajectory.kml", "application/vnd.google-earth.kml+xml",
                        use_container_width=True)
-    st.download_button("⬇️ elements.json", json.dumps(el, indent=2).encode(),
+    el_json = {k: (None if isinstance(v, float) and not np.isfinite(v) else v)
+               for k, v in el.items()}
+    st.download_button("⬇️ elements.json", json.dumps(el_json, indent=2).encode(),
                        "elements.json", "application/json", use_container_width=True)
-    st.caption("เปิด trajectory.kml ด้วย Google Earth เพื่อดูเส้นทางลอยเหนือแผนที่จริง")  
-        
+    st.caption("เปิด trajectory.kml ด้วย Google Earth เพื่อดูเส้นทางลอยเหนือแผนที่จริง")
