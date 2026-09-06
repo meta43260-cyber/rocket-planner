@@ -1,7 +1,6 @@
 """
 booster.py — แปลง strap-on booster (ขนาน) เป็นสเตจเสมือน (อนุกรม)
 รองรับ: หลายกลุ่ม, จุดต่างเวลา, สลัดหน่วงเวลา, core throttle
-[FIX] core ดับแล้วแรงขับ/เชื้อเพลิง core = 0, booster เผาต่อจนหมดแล้วสลัด
 """
 G0 = 9.80665
 EPS = 1e-6
@@ -53,14 +52,13 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
     tau_s = solo_throttle_pct / 100.0
     T_core = (core_depletion_time(core, groups, tau_b, tau_s)
               if auto_burn else core["burn_time"])
-    t_last = T_core
     ev = {0.0, T_core}
     for g in groups:
         ev.add(g["ignite_t"])
         ev.add(g["ignite_t"] + g["burn_time"])
         ev.add(g["ignite_t"] + g["burn_time"] + g["jettison_delay"])
-        t_last = max(t_last, g["ignite_t"] + g["burn_time"] + g["jettison_delay"])
-    t_last = max([T_core] + [g["ignite_t"] + g["burn_time"] + g["jettison_delay"] for g in groups])
+    t_last = max([T_core] + [g["ignite_t"] + g["burn_time"] + g["jettison_delay"]
+                             for g in groups])
     times = sorted(t for t in ev if -EPS <= t <= t_last + EPS)
     rem_boost = sum(g["count"] * g["prop_mass"] for g in groups)
     phases, log = [], []
@@ -73,7 +71,6 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
         core_on = tm < T_core - EPS
         burning = [g for g in groups if _is_burning(g, tm)]
         attached = [g for g in groups if _is_attached(g, tm)]
-        core_on = tm < T_core - EPS
         tau = _core_throttle(groups, tm, tau_b, tau_s) if core_on else 0.0
         F_sl = tau * core["thrust_sl"] + sum(g["count"] * g["thrust_sl"] for g in burning)
         F_vac = tau * core["thrust_vac"] + sum(g["count"] * g["thrust_vac"] for g in burning)
@@ -122,4 +119,3 @@ def validate(core, groups, phases):
     if phases[0]["thrust_sl"] <= 0:
         warn.append("แรงขับเริ่มต้นเป็นศูนย์ — ตรวจ ignite_t ของ booster")
     return warn
-
