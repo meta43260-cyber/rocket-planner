@@ -209,9 +209,17 @@ def admin_me(authorization: str | None = Header(default=None)):
 def admin_rockets(authorization: str | None = Header(default=None)):
     client = _client(authorization)
     _require_admin(client)
+    rockets = _rows(client, "rockets", {"select": "*", "order": "name.asc"})
+    versions = _rows(client, "rocket_versions", {"select": "*", "order": "revision.desc"})
+    stages = _rows(client, "rocket_stages", {"select": "*", "order": "stage_number.asc"})
+    boosters = _rows(client, "rocket_boosters", {"select": "*", "order": "name.asc"})
+    sources = _rows(client, "rocket_sources", {"select": "*", "order": "title.asc"})
     return {
-        "rockets": _rows(client, "rockets"),
-        "versions": _rows(client, "rocket_versions"),
+        "rockets": rockets,
+        "versions": versions,
+        "stages": stages,
+        "boosters": boosters,
+        "sources": sources,
     }
 
 @router.get("/admin/schema")
