@@ -162,30 +162,39 @@ def event_rows(ascent, fairing_t=None, payload_t=None, fairing_alt=110,
 
     for name in names:
         subset = ascent[ascent["stage"] == name]
-        powered = subset[subset["thrust_kN"] > 0.1].copy()
-        if timeline_stages is None and name != first and not subset.empty:
-            row = subset.iloc[0]
-            events.append({"event": f"{name} — separation", "t": float(row.t),
-                           "alt_km": float(row.alt_km), "velocity_mps": float(row.v_relative)})
-        if not powered.empty:
-            # A gap in powered samples marks a cutoff/coast/restart sequence.
-            powered = powered.sort_values("t")
-            segment_ids = powered["t"].diff().fillna(0).gt(0.75).cumsum()
-            segments = list(powered.groupby(segment_ids))
-            for number, (_, segment) in enumerate(segments, start=1):
-                first_row, last_row = segment.iloc[0], segment.iloc[-1]
-                suffix = "" if len(segments) == 1 else f" #{number}"
-                events.append({"event": f"{name} — ignition{suffix}",
-                               "t": float(first_row.t), "alt_km": float(first_row.alt_km),
-                               "velocity_mps": float(first_row.v_relative)})
-                events.append({"event": f"{name} — cutoff{suffix}",
-                               "t": float(last_row.t), "alt_km": float(last_row.alt_km),
-                               "velocity_mps": float(last_row.v_relative)})
+        if timeline_stages is None:
+            powered = subset[subset["thrust_kN"] > 0.1].copy()
+            if name != first and not subset.empty:
+                row = subset.iloc[0]
+                events.append({"event": f"{name} — separation", "t": float(row.t),
+                               "alt_km": float(row.alt_km), "velocity_mps": float(row.v_relative)})
+            if not powered.empty:
+                # A gap in powered samples marks a cutoff/coast/restart sequence.
+                powered = powered.sort_values("t")
+                segment_ids = powered["t"].diff().fillna(0).gt(0.75).cumsum()
+                segments = list(powered.groupby(segment_ids))
+                for number, (_, segment) in enumerate(segments, start=1):
+                    first_row, last_row = segment.iloc[0], segment.iloc[-1]
+                    suffix = "" if len(segments) == 1 else f" #{number}"
+                    events.append({"event": f"{name} — ignition{suffix}",
+                                   "t": float(first_row.t), "alt_km": float(first_row.alt_km),
+                                   "velocity_mps": float(first_row.v_relative)})
+                    events.append({"event": f"{name} — cutoff{suffix}",
+                                   "t": float(last_row.t), "alt_km": float(last_row.alt_km),
+                                   "velocity_mps": float(last_row.v_relative)})
 
     if timeline_stages is not None:
         for i, timeline_stage in enumerate(timeline_stages):
             if timeline_has_boosters and i == 0:
                 continue
+            burns = timeline_stage.burns or [
+                TimelineBurn(ignition_t=timeline_stage.ignition_t,
+                             cutoff_t=timeline_stage.cutoff_t)
+            ]
+            for number, burn in enumerate(burns, start=1):
+                suffix = f" #{number}" if len(burns) > 1 else ""
+                add_event(f"Stage {i + 1} — ignition{suffix}", burn.ignition_t)
+                add_event(f"Stage {i + 1} — cutoff{suffix}", burn.cutoff_t)
             add_event(f"Stage {i + 1} — separation (timeline)",
                       timeline_stage.separation_t)
     if fairing_t is not None:
