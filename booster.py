@@ -105,7 +105,7 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
                     for g in burning
                 ))
         w_vac = (tau * core["thrust_vac"] / core["isp_vac"]
-                 + sum(g["count"] * g["thrust_vac"] / g["isp_vac"] for g in burning))
+                 + sum(g["count"] * booster_vac(g, tm) / g["isp_vac"] for g in burning))
         isp_sl = F_sl / w_sl if w_sl > 0 else core["isp_sl"]
         isp_vac = F_vac / w_vac if w_vac > 0 else core["isp_vac"]
         want = sum(g["count"] * mdot(booster_vac(g, tm), g["isp_vac"]) * dt
@@ -137,7 +137,9 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
 def validate(core, groups, phases):
     warn = []
     for g in groups:
-        if g["thrust_sl"] is None and g["isp_sl"] is None:
+        if not g.get("thrust_curve"):
+            warn.append(f'{g["name"]}: ไม่มี Thrust-Time Curve — สมมติแรงขับคงที่ตลอดการเผาไหม้')
+        if g["thrust_sl"] is None:
             warn.append(
                 f'{g["name"]}: ไม่มีข้อมูล Thrust SL — ใช้ค่า Vacuum เป็นค่าประมาณ '
                 'ผลช่วงใกล้พื้นโลกอาจสูงเกินจริง'
