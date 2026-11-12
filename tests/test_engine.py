@@ -38,3 +38,15 @@ def test_api_health_and_json_cleaning():
     assert health()["status"] == "ok"
     assert clean(float("inf")) is None
     assert clean(float("nan")) is None
+
+
+def test_launch_azimuth_uses_entered_compass_heading():
+    azimuth, inertial_azimuth, earth_bonus = rp.launch_azimuth(
+        13.72, 270.0, 170_000.0
+    )
+    assert azimuth == 270.0
+    assert 0.0 <= inertial_azimuth < 360.0
+    assert earth_bonus < 0.0
+
+    wrapped_azimuth, _, _ = rp.launch_azimuth(13.72, 360.0, 170_000.0)
+    assert wrapped_azimuth == 0.0

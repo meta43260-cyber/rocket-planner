@@ -80,7 +80,7 @@ class SimulationInput(BaseModel):
     obs_alt: float = Field(default=0, ge=-500, le=5000)
     target_alt: float = Field(default=550, ge=120, le=2000)
     target_apogee_alt: float = Field(default=35786, ge=120, le=1000000)
-    launch_azimuth_deg: float = Field(default=90, ge=0, le=360, description="Earth-fixed launch azimuth clockwise from true north")
+    launch_azimuth_deg: float = Field(default=75.3, ge=0, le=360, description="Earth-fixed launch azimuth clockwise from true north")
     mission_type: str = "circular"
     launch_utc: datetime
     auto_profile: bool = True

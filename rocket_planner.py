@@ -124,7 +124,7 @@ class Mission:
     site_lon: float
     site_alt: float = 0.0
     target_alt: float = 500e3
-    launch_azimuth_deg: float = 90.0
+    launch_azimuth_deg: float = 75.3
     launch_jd: float = 2451545.0
     vertical_time: float = 10.0
     kick_angle: float = 6.5
