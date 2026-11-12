@@ -1,7 +1,7 @@
 const $=id=>document.getElementById(id);
 let lastResult=null,lastPayload=null,mapObj=null;
 function setVal(id,v){if(v!==undefined&&v!==null&&$(id))$(id).value=v}
-function stageTimeline(stages){let t=0;return stages.map(s=>{const ign=t+Number(s.ignition_delay||0),cut=ign+Number(s.burn_time),sep=cut+2;t=sep;return {ignition_t:ign,cutoff_t:cut,separation_t:sep}})}
+function stageTimeline(stages){let t=0;return stages.map(s=>{const ign=t+Number(s.ignition_delay||0),cut=ign+Number(s.burn_time),sep=cut+2;t=sep;return {ignition_t:ign,cutoff_t:cut,separation_t:sep,burns:[{ignition_t:ign,cutoff_t:cut}]}})}
 function applyConfig(p){
  for(const k of ["payload","fairing_mass","fairing_alt","site_lat","site_lon","site_alt","target_alt","target_apogee_alt","launch_azimuth_deg","mission_type","vertical_time","kick_angle","kick_duration"])setVal(k,p[k]);
  $("stages").value=JSON.stringify(p.stages||[],null,2);
@@ -134,9 +134,9 @@ function loadDatabaseRocket() {
   const boosters = (version.boosters || []).map(booster => ({
     name: booster.name || "SRB",
     count: booster.quantity,
-    thrust_sl: booster.thrust_sl_kn,
+    thrust_sl: booster.thrust_sl_kn ?? null,
     thrust_vac: booster.thrust_vac_kn,
-    isp_sl: booster.isp_sl_s,
+    isp_sl: booster.isp_sl_s ?? null,
     isp_vac: booster.isp_vac_s,
     prop_mass: booster.prop_mass_kg,
     dry_mass: booster.dry_mass_kg,

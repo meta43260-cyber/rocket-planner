@@ -43,9 +43,11 @@ class StageInput(BaseModel):
 class BoosterInput(BaseModel):
     name: str = "SRB"
     count: int = Field(default=2, ge=1, le=12)
-    thrust_sl: float = Field(gt=0)
+    # Optional for solid boosters when manufacturer sea-level data is unpublished.
+    # If omitted, booster.py uses vacuum values as an explicit approximation and warns.
+    thrust_sl: float | None = Field(default=None, gt=0)
     thrust_vac: float = Field(gt=0)
-    isp_sl: float = Field(gt=0)
+    isp_sl: float | None = Field(default=None, gt=0)
     isp_vac: float = Field(gt=0)
     prop_mass: float = Field(gt=0)
     dry_mass: float = Field(ge=0)
@@ -55,10 +57,18 @@ class BoosterInput(BaseModel):
     jettison_delay: float = Field(default=2, ge=0, le=300)
 
 
-class TimelineStage(BaseModel):
+class TimelineBurn(BaseModel):
     ignition_t: float = Field(ge=0, le=100000)
     cutoff_t: float = Field(gt=0, le=100000)
+
+
+class TimelineStage(BaseModel):
+    # Legacy single-burn fields remain accepted for existing saved timelines.
+    ignition_t: float | None = Field(default=None, ge=0, le=100000)
+    cutoff_t: float | None = Field(default=None, gt=0, le=100000)
     separation_t: float = Field(ge=0, le=100000)
+    # Multiple ignition/cutoff pairs for restartable stages.
+    burns: list[TimelineBurn] = Field(default_factory=list, max_length=10)
 
 
 class TimelineInput(BaseModel):
@@ -138,24 +148,57 @@ def records(df, columns=None, stride=1):
     return clean(view.to_dict(orient="records"))
 
 
-def event_rows(ascent, fairing_t=None, payload_t=None, fairing_alt=110):
+def event_rows(ascent, fairing_t=None, payload_t=None, fairing_alt=110,
+               timeline_stages=None, timeline_has_boosters=False):
     events = []
     names = [n for n in ascent["stage"].dropna().unique() if n != "coast"]
     first = names[0] if names else None
+
+    def add_event(label, t_event):
+        if float(t_event) > float(ascent["t"].iloc[-1]) + 1e-9:
+            return
+        row = ascent.iloc[(ascent["t"] - float(t_event)).abs().idxmin()]
+        events.append({"event": label, "t": float(t_event),
+                       "alt_km": float(row.alt_km),
+                       "velocity_mps": float(row.v_relative)})
+
     for name in names:
         subset = ascent[ascent["stage"] == name]
-        powered = subset[subset["thrust_kN"] > 0.1]
-        if name != first and not subset.empty:
-            row = subset.iloc[0]
-            events.append({"event": f"{name} — separation", "t": float(row.t),
-                           "alt_km": float(row.alt_km), "velocity_mps": float(row.v_relative)})
-        if not powered.empty:
-            row = powered.iloc[0]
-            events.append({"event": f"{name} — ignition", "t": float(row.t),
-                           "alt_km": float(row.alt_km), "velocity_mps": float(row.v_relative)})
-            row = powered.iloc[-1]
-            events.append({"event": f"{name} — cutoff", "t": float(row.t),
-                           "alt_km": float(row.alt_km), "velocity_mps": float(row.v_relative)})
+        if timeline_stages is None:
+            powered = subset[subset["thrust_kN"] > 0.1].copy()
+            if name != first and not subset.empty:
+                row = subset.iloc[0]
+                events.append({"event": f"{name} — separation", "t": float(row.t),
+                               "alt_km": float(row.alt_km), "velocity_mps": float(row.v_relative)})
+            if not powered.empty:
+                # A gap in powered samples marks a cutoff/coast/restart sequence.
+                powered = powered.sort_values("t")
+                segment_ids = powered["t"].diff().fillna(0).gt(0.75).cumsum()
+                segments = list(powered.groupby(segment_ids))
+                for number, (_, segment) in enumerate(segments, start=1):
+                    first_row, last_row = segment.iloc[0], segment.iloc[-1]
+                    suffix = "" if len(segments) == 1 else f" #{number}"
+                    events.append({"event": f"{name} — ignition{suffix}",
+                                   "t": float(first_row.t), "alt_km": float(first_row.alt_km),
+                                   "velocity_mps": float(first_row.v_relative)})
+                    events.append({"event": f"{name} — cutoff{suffix}",
+                                   "t": float(last_row.t), "alt_km": float(last_row.alt_km),
+                                   "velocity_mps": float(last_row.v_relative)})
+
+    if timeline_stages is not None:
+        for i, timeline_stage in enumerate(timeline_stages):
+            if timeline_has_boosters and i == 0:
+                continue
+            burns = timeline_stage.burns or [
+                TimelineBurn(ignition_t=timeline_stage.ignition_t,
+                             cutoff_t=timeline_stage.cutoff_t)
+            ]
+            for number, burn in enumerate(burns, start=1):
+                suffix = f" #{number}" if len(burns) > 1 else ""
+                add_event(f"Stage {i + 1} — ignition{suffix}", burn.ignition_t)
+                add_event(f"Stage {i + 1} — cutoff{suffix}", burn.cutoff_t)
+            add_event(f"Stage {i + 1} — separation (timeline)",
+                      timeline_stage.separation_t)
     if fairing_t is not None:
         row = ascent.iloc[(ascent["t"] - fairing_t).abs().idxmin()]
         events.append({"event": "Fairing jettison (timeline)", "t": float(row.t),
@@ -198,6 +241,13 @@ def simulate(data: SimulationInput):
         raise HTTPException(422, "mission_type must be circular, elliptical or escape")
     if data.use_boost and not data.boost_groups:
         raise HTTPException(422, "Add at least one booster group or disable Side Booster.")
+    if data.use_boost:
+        for i, booster in enumerate(data.boost_groups, start=1):
+            if (booster.thrust_sl is None) != (booster.isp_sl is None):
+                raise HTTPException(
+                    422,
+                    f"Booster {i}: enter both sea-level thrust and ISP, or leave both blank."
+                )
     # Stage 1 starts at the launch site and therefore needs both sea-level values
     # for the initial TWR estimate. Upper stages may omit both only when they
     # ignite in near-vacuum; supplying just one is an inconsistent engine model.
@@ -211,11 +261,28 @@ def simulate(data: SimulationInput):
             raise HTTPException(422, "Timeline must contain one event row for every original core stage.")
         previous_sep = -1.0
         for i, row in enumerate(data.timeline.stages):
-            if row.cutoff_t <= row.ignition_t or row.separation_t < row.cutoff_t:
-                raise HTTPException(422, f"Invalid ignition/cutoff/separation times for stage {i + 1}.")
-            if i and row.ignition_t < previous_sep and not (data.use_boost and i == 0):
+            windows = row.burns or (
+                [TimelineBurn(ignition_t=row.ignition_t, cutoff_t=row.cutoff_t)]
+                if row.ignition_t is not None and row.cutoff_t is not None else []
+            )
+            if not windows:
+                raise HTTPException(422, f"Stage {i + 1}: provide ignition_t/cutoff_t or a non-empty burns array.")
+            previous_cut = -1.0
+            for burn in windows:
+                if burn.cutoff_t <= burn.ignition_t:
+                    raise HTTPException(422, f"Stage {i + 1}: each cutoff must be after its ignition.")
+                if burn.ignition_t < previous_cut:
+                    raise HTTPException(422, f"Stage {i + 1}: burn windows must be ordered and must not overlap.")
+                previous_cut = burn.cutoff_t
+            if row.separation_t < previous_cut:
+                raise HTTPException(422, f"Stage {i + 1}: separation cannot occur before the final cutoff.")
+            first_ignition = windows[0].ignition_t
+            if i and first_ignition < previous_sep and not (data.use_boost and i == 0):
                 raise HTTPException(422, f"Stage {i + 1} ignition precedes previous stage separation.")
             previous_sep = row.separation_t
+        if (data.timeline.payload_t is not None
+                and data.timeline.payload_t < windows[-1].cutoff_t):
+            raise HTTPException(422, "Payload deployment cannot precede the final stage's last engine cutoff.")
     try:
         launch_jd = jd_from_datetime(data.launch_utc)
         original = [s.model_dump() if hasattr(s, "model_dump") else s.dict() for s in data.stages]
@@ -243,14 +310,26 @@ def simulate(data: SimulationInput):
                 if index < 0 or index >= len(stages_cfg):
                     continue
                 stage = stages_cfg[index]
-                stage["burn_time"] = max(row.cutoff_t - row.ignition_t, 0.1)
+                windows = row.burns or [
+                    TimelineBurn(ignition_t=row.ignition_t, cutoff_t=row.cutoff_t)
+                ]
+                stage["burn_windows"] = [
+                    (float(burn.ignition_t), float(burn.cutoff_t))
+                    for burn in windows
+                ]
+                stage["burn_time"] = sum(
+                    cutoff - ignition for ignition, cutoff in stage["burn_windows"]
+                )
+                stage["separation_t"] = float(row.separation_t)
                 if i > 0:
                     prev_sep = rows[i - 1].separation_t
-                    stage["ignition_delay"] = max(row.ignition_t - prev_sep, 0.0)
+                    stage["ignition_delay"] = max(windows[0].ignition_t - prev_sep, 0.0)
             fair_t = data.timeline.fairing_t
             payload_t = data.timeline.payload_t
+            timeline_end = max(row.separation_t for row in rows)
+            max_time = max(max_time, timeline_end + 2.0)
             if payload_t is not None:
-                max_time = max(max_time, payload_t + 1800.0)
+                max_time = max(max_time, payload_t + 2.0)
 
         stages = [rp.Stage(
             s.get("name", f"Stage {i + 1}"),
@@ -258,7 +337,9 @@ def simulate(data: SimulationInput):
             s["thrust_vac"] * 1000,
             s.get("isp_sl"), s["isp_vac"],
             s["prop_mass"], s["dry_mass"], s["burn_time"], s["area"],
-            float(s.get("ignition_delay", 0.0))
+            float(s.get("ignition_delay", 0.0)),
+            s.get("burn_windows"),
+            s.get("separation_t")
         ) for i, s in enumerate(stages_cfg)]
         vehicle = rp.Vehicle(
             stages=stages, payload=data.payload, fairing_mass=data.fairing_mass,
@@ -321,7 +402,11 @@ def simulate(data: SimulationInput):
             "orbit": records(orbit, ["t","lat","lon","alt_km"]),
             "look": records(look, ["t","az_deg","el_deg","range_km","alt_km",
                 "sun_el_deg","rocket_sunlit","photo_window","angular_rate"]),
-            "events": event_rows(ascent, fair_t, payload_t, data.fairing_alt),
+            "events": event_rows(
+                ascent, fair_t, payload_t, data.fairing_alt,
+                data.timeline.stages if data.use_timeline and data.timeline else None,
+                data.use_boost
+            ),
             "boost_log": boost_log, "boost_warnings": boost_warnings,
             "report": rp.photo_report(look, data.min_elevation),
             "launch_utc": data.launch_utc.isoformat(),

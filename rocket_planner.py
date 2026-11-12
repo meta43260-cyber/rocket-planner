@@ -90,6 +90,10 @@ class Stage:
     burn_time: float
     area: float
     ignition_delay: float = 0.0
+    # Absolute mission-time intervals (T+ seconds) for restartable engines.
+    # None preserves the legacy single-continuous-burn behavior.
+    burn_windows: Optional[List[Tuple[float, float]]] = None
+    separation_t: Optional[float] = None
 
     def thrust(self, p: float) -> float:
         # With no sea-level datum, model this upper stage at its vacuum rating.
@@ -330,11 +334,28 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             elif alt >= vehicle.fairing_jettison_alt:
                 fairing_on = False
 
-        burning = (idx < len(stages) and prop_left[idx] > 0.0
-                   and stage_time[idx] < stages[idx].burn_time
-                   and t >= ignite_at)
+        # Timeline-controlled stages remain attached through coast intervals
+        # and are discarded only at their explicit separation time.
+        if (idx < len(stages) and stages[idx].separation_t is not None
+                and t >= stages[idx].separation_t):
+            idx += 1
+            if idx >= len(stages):
+                break
+            ignite_at = t
+            continue
 
-        if (idx < len(stages) and not burning and t >= ignite_at
+        if idx < len(stages) and stages[idx].burn_windows is not None:
+            burning = (
+                prop_left[idx] > 0.0
+                and any(start <= t < end for start, end in stages[idx].burn_windows)
+            )
+        else:
+            burning = (idx < len(stages) and prop_left[idx] > 0.0
+                       and stage_time[idx] < stages[idx].burn_time
+                       and t >= ignite_at)
+
+        if (idx < len(stages) and stages[idx].burn_windows is None
+                and not burning and t >= ignite_at
                 and (prop_left[idx] <= 0.0
                      or stage_time[idx] >= stages[idx].burn_time - 1e-9)):
             if idx + 1 < len(stages):
