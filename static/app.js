@@ -14,6 +14,11 @@ function applyConfig(p){
  $("boost_groups").value=JSON.stringify(p.boost_groups||[],null,2);
  $("use_boost").checked=!!p.use_boost;
  $("boost-fields").classList.toggle("hidden",!p.use_boost);
+ setVal("boost_throttle",p.boost_throttle??100);setVal("solo_throttle",p.solo_throttle??100);
+ $("boost_auto_burn").checked=p.boost_auto_burn!==false;
+ for(const k of ["obs_lat","obs_lon","obs_alt","min_elevation","timestep","orbit_count"])setVal(k,p[k]);
+ if(p.ascend_east!==undefined)$("ascend_east").checked=!!p.ascend_east;
+ if(p.auto_profile!==undefined){$("auto_profile").checked=!!p.auto_profile;$("manual-profile").classList.toggle("hidden",!!p.auto_profile)}
  $("mission_type").value=p.mission_type||"circular";
  $("target_apogee_alt").disabled=$("mission_type").value==="circular";
 }
