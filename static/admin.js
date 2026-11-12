@@ -7,7 +7,6 @@ async function api(path,method="GET",body){
  const r=await fetch("/api"+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
  const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.detail||"Request failed: "+r.status);return d
 }
-function parse(id){try{return JSON.parse($(id).value)}catch(e){throw Error("JSON ไม่ถูกต้อง ("+id+"): "+e.message)}}
 function esc(v){return String(v??"—").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function n(v,unit=""){return v===null||v===undefined?"—":Number(v).toLocaleString("en-US")+unit}
 function renderCatalog(data){
@@ -33,8 +32,16 @@ function renderCatalog(data){
  }).join("");
  refreshDbSelects();
  root.querySelectorAll("[data-version]").forEach(btn=>btn.addEventListener("click",()=>{
-  $("rocket-id").value=btn.dataset.rocket;$("version-id").value=btn.dataset.version;
-  status("เลือก Rocket และ Revision แล้ว");$("version-id").scrollIntoView({behavior:"smooth",block:"center"})
+  const rocketId=btn.dataset.rocket,versionId=btn.dataset.version;
+  $("db-rocket-select").value=rocketId;$("db-rocket-select").dispatchEvent(new Event("change"));
+  $("db-version-rocket").value=rocketId;fillDbVersionSelect();
+  const version=(catalogData?.versions||[]).find(v=>v.id===versionId);
+  if(version?.status==="draft"){
+   $("db-version-select").value=versionId;fillDbVersionForm();
+   $("db-child-version").value=versionId;fillDbChildSelect();
+  }
+  $("quick-db-editor").scrollIntoView({behavior:"smooth",block:"start"});
+  status(version?.status==="draft"?"เลือก Draft เพื่อแก้ไขแล้ว":"Revision ที่เผยแพร่แล้วอ่านได้อย่างเดียว · สร้าง Draft ใหม่เพื่อแก้ไข");
  }));
 }
 async function load(){
@@ -46,12 +53,6 @@ function show(){$("login-panel").classList.toggle("hidden",!!token);$("workspace
 $("login").onclick=async()=>{try{const r=await fetch("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:$("email").value,password:$("password").value})});const d=await r.json();if(!r.ok)throw Error(d.detail||"Login failed");token=d.access_token;sessionStorage.setItem("rp_admin_token",token);$("password").value="";show();await load()}catch(e){alert(e.message)}};
 $("logout").onclick=()=>{token="";sessionStorage.removeItem("rp_admin_token");show()};
 $("refresh").onclick=()=>load().catch(e=>status(e.message));
-$("inspect-schema").onclick=async()=>{try{status("กำลังอ่านโครงสร้างตารางจาก Supabase...");const schema=await api("/admin/schema");status(schema)}catch(e){status("ตรวจ Schema ไม่สำเร็จ: "+e.message)}};
-$("create-rocket").onclick=async()=>{try{const d=await api("/admin/rockets","POST",parse("rocket-json"));$("rocket-id").value=d.id||"";status({created:d});await load()}catch(e){status(e.message)}};
-$("create-version").onclick=async()=>{try{const id=$("rocket-id").value.trim();if(!id)throw Error("กรุณาระบุ Rocket ID");const d=await api("/admin/rockets/"+encodeURIComponent(id)+"/versions","POST",parse("version-json"));$("version-id").value=d.id||"";status({draft_created:d});await load()}catch(e){status(e.message)}};
-$("add-child").onclick=async()=>{try{const id=$("version-id").value.trim();if(!id)throw Error("กรุณาระบุ Version ID");const d=await api("/admin/versions/"+encodeURIComponent(id)+"/"+$("child-table").value,"POST",parse("child-json"));status({inserted:d});await load()}catch(e){status(e.message)}};
-$("publish").onclick=async()=>{try{const id=$("version-id").value.trim();if(!id)throw Error("กรุณาระบุ Version ID");if(!confirm("ยืนยันเผยแพร่ Revision นี้?"))return;const d=await api("/admin/versions/"+encodeURIComponent(id)+"/publish","POST");status({published:d});await load()}catch(e){status(e.message)}};
-
 const dbFields={
  rocket_stages:[["stage_number","ลำดับ Stage","number"],["name","ชื่อ Stage","text"],["thrust_sl_kn","Thrust sea level (kN)","number"],["thrust_vac_kn","Thrust vacuum (kN)","number"],["isp_sl_s","ISP sea level (s)","number"],["isp_vac_s","ISP vacuum (s)","number"],["prop_mass_kg","Propellant (kg)","number"],["dry_mass_kg","Dry mass (kg)","number"],["burn_time_s","Burn time (s)","number"],["reference_area_m2","Reference area (m²)","number"],["ignition_delay_s","Ignition delay (s)","number"]],
  rocket_boosters:[["name","ชื่อ Booster","text"],["quantity","จำนวน","number"],["thrust_sl_kn","Thrust sea level (kN)","number"],["thrust_vac_kn","Thrust vacuum (kN)","number"],["isp_sl_s","ISP sea level (s)","number"],["isp_vac_s","ISP vacuum (s)","number"],["prop_mass_kg","Propellant (kg)","number"],["dry_mass_kg","Dry mass (kg)","number"],["burn_time_s","Burn time (s)","number"],["reference_area_m2","Reference area (m²)","number"],["ignite_t_s","Ignition time (s)","number"],["jettison_delay_s","Jettison delay (s)","number"]],
@@ -146,3 +147,15 @@ $("db-save-child").onclick=async()=>{
 };
 
 show();if(token)load().catch(e=>{status(e.message);token="";sessionStorage.removeItem("rp_admin_token");show()});
+
+$("db-publish-version").onclick=async()=>{
+ try{
+  const id=dbVal("db-version-select");
+  if(!id)throw Error("เลือก Draft Revision ที่ต้องการเผยแพร่ก่อน");
+  const version=(catalogData?.versions||[]).find(v=>v.id===id);
+  if(!version||version.status!=="draft")throw Error("เผยแพร่ได้เฉพาะ Draft เท่านั้น");
+  if(!confirm("ยืนยันเผยแพร่ Revision "+version.revision+"? ข้อมูลนี้จะกลายเป็นเวอร์ชันสาธารณะ"))return;
+  await api("/admin/versions/"+encodeURIComponent(id)+"/publish","POST");
+  status("เผยแพร่ Revision สำเร็จ");await load();
+ }catch(e){status(e.message)}
+};
