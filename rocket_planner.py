@@ -94,14 +94,20 @@ class Stage:
     # None preserves the legacy single-continuous-burn behavior.
     burn_windows: Optional[List[Tuple[float, float]]] = None
     separation_t: Optional[float] = None
+    thrust_curve: Optional[List[Tuple[float, float]]] = None
 
-    def thrust(self, p: float) -> float:
+    def thrust(self, p: float, burn_elapsed: float = 0.0) -> float:
         # With no sea-level datum, model this upper stage at its vacuum rating.
         # This is appropriate only when the stage ignites in near-vacuum.
-        if self.thrust_sl is None:
-            return self.thrust_vac
         f = min(max(p / P0, 0.0), 1.0)
-        return self.thrust_vac + (self.thrust_sl - self.thrust_vac) * f
+        vacuum = self.thrust_vac
+        if self.thrust_curve:
+            times = [point[0] for point in self.thrust_curve]
+            values = [point[1] * 1000.0 for point in self.thrust_curve]
+            vacuum = float(np.interp(burn_elapsed, times, values))
+        if self.thrust_sl is None:
+            return vacuum
+        return vacuum + (self.thrust_sl - self.thrust_vac) * f
 
     def isp(self, p: float) -> float:
         if self.isp_sl is None:
@@ -379,7 +385,7 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
 
         if burning:
             stg = stages[idx]
-            thr = stg.thrust(p)
+            thr = stg.thrust(p, stage_time[idx])
             isp = stg.isp(p)
             mdot = thr / (G0 * isp)
             thr_vec = thr * u
