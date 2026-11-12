@@ -1,6 +1,8 @@
 const $=id=>document.getElementById(id);
 let token=sessionStorage.getItem("rp_admin_token")||"",catalogData=null;
 function status(x){$("status").textContent=typeof x==="string"?x:JSON.stringify(x,null,2)}
+window.addEventListener("error",event=>{const el=$("status");if(el)el.textContent="JavaScript error: "+(event.message||"unknown error")});
+window.addEventListener("unhandledrejection",event=>{const el=$("status");if(el)el.textContent="Request error: "+(event.reason?.message||String(event.reason||"unknown error"))});
 async function api(path,method="GET",body){
  const headers={};if(token)headers.Authorization="Bearer "+token;
  if(body!==undefined)headers["Content-Type"]="application/json";
@@ -132,24 +134,28 @@ $("db-save-version").onclick=async()=>{
   status(id?"แก้ไข Revision แล้ว":"สร้าง Draft Revision แล้ว");await load();$("db-version-rocket").value=rid;fillDbVersionSelect();$("db-version-select").value=saved.id;fillDbVersionForm();
  }catch(e){status(e.message)}
 };
-$("db-save-child").onclick=async()=>{
+$("db-save-child").type="button";
+$("db-save-child").addEventListener("click",async()=>{
+ const button=$("db-save-child"),label=button.textContent;
+ button.disabled=true;button.textContent="กำลังบันทึก...";status("กำลังส่งข้อมูลไปยังฐานข้อมูล...");
  try{
   const vid=dbVal("db-child-version"),kind=$("db-child-type").value,id=dbVal("db-child-select");
-  if(!vid)throw Error("เลือก Revision ก่อน");
+  if(!vid)throw Error("ยังไม่มี Draft Revision · กรุณาสร้างหรือเลือก Draft ก่อน");
   const payload={};$("db-child-fields").querySelectorAll("[data-db-field]").forEach(el=>{const v=el.value.trim();if(v!=="")payload[el.dataset.dbField]=el.type==="number"?Number(v):v});
   if(kind==="rocket_stages"){
-   // Explicit null clears previously saved optional SL values in Supabase.
    for(const key of ["thrust_sl_kn","isp_sl_s"])if(!(key in payload))payload[key]=null;
    if(!payload.stage_number)throw Error("กรอกลำดับ Stage");
-   const hasSlThrust=payload.thrust_sl_kn!==null,hasSlIsp=payload.isp_sl_s!==null;
-   if(Number(payload.stage_number)===1&&(!hasSlThrust||!hasSlIsp))throw Error("Stage 1 ต้องกรอกทั้ง Thrust SL และ ISP SL");
-   if(hasSlThrust!==hasSlIsp)throw Error("กรอกทั้ง Thrust SL และ ISP SL หรือเว้นว่างทั้งคู่");
+   const a=payload.thrust_sl_kn!==null,b=payload.isp_sl_s!==null;
+   if(Number(payload.stage_number)===1&&(!a||!b))throw Error("Stage 1 ต้องกรอกทั้ง Thrust SL และ ISP SL");
+   if(a!==b)throw Error("กรอกทั้ง Thrust SL และ ISP SL หรือเว้นว่างทั้งคู่");
   }
   if(kind==="rocket_sources"&&!payload.title)throw Error("กรอกชื่อแหล่งข้อมูล");
   const saved=id?await api("/admin/"+kind+"/"+encodeURIComponent(id),"PATCH",payload):await api("/admin/versions/"+encodeURIComponent(vid)+"/"+kind,"POST",payload);
-  status(id?"แก้ไขข้อมูลแล้ว":"เพิ่มข้อมูลแล้ว");await load();$("db-child-version").value=vid;fillDbChildSelect();if(saved.id)$("db-child-select").value=saved.id;$("db-child-select").dispatchEvent(new Event("change"));
- }catch(e){status(e.message)}
-};
+  status(id?"บันทึกการแก้ไขสำเร็จ":"เพิ่มรายการสำเร็จ");
+  await load();$("db-child-version").value=vid;fillDbChildSelect();if(saved.id)$("db-child-select").value=saved.id;$("db-child-select").dispatchEvent(new Event("change"));
+ }catch(e){status("บันทึกไม่สำเร็จ: "+(e?.message||String(e)));$("status").scrollIntoView({behavior:"smooth",block:"center"})}
+ finally{button.disabled=false;button.textContent=label}
+ });;
 
 show();if(token)load().catch(e=>{status(e.message);token="";sessionStorage.removeItem("rp_admin_token");show()});
 
