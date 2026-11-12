@@ -100,7 +100,8 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
         phase_curve.append([dt, tau * core["thrust_vac"] + sum(g["count"] * booster_vac(g, t1 - 1e-7) for g in burning)])
         w_sl = (tau * core["thrust_sl"] / core["isp_sl"]
                 + sum(
-                    g["count"] * (g["thrust_sl"] if g["thrust_sl"] is not None else g["thrust_vac"])
+                    g["count"] * (booster_vac(g, tm) + (g["thrust_sl"] - g["thrust_vac"])
+                    if g["thrust_sl"] is not None else booster_vac(g, tm))
                     / (g["isp_sl"] if g["isp_sl"] is not None else g["isp_vac"])
                     for g in burning
                 ))
