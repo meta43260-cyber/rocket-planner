@@ -82,7 +82,7 @@ PRESETS = {
         ],
         payload=2367.0, fairing_mass=1200.0, fairing_alt=115.0,
         site_lat=13.72, site_lon=80.23, site_alt=10.0,
-        target_alt=170.0, target_inc=19.35,
+        target_alt=170.0, launch_azimuth_deg=75.3,
         vertical_time=10.0, kick_angle=3.0, kick_duration=12.0,
         use_boost=True,
         boost=dict(cnt=4, tsl=680.0, tvc=762.0, isl=250.0, ivc=262.0,
@@ -98,7 +98,7 @@ PRESETS = {
         ],
         payload=15000.0, fairing_mass=1900.0, fairing_alt=110.0,
         site_lat=28.5619, site_lon=-80.5772, site_alt=10.0,
-        target_alt=550.0, target_inc=53.0,
+        target_alt=550.0, launch_azimuth_deg=42.4,
         vertical_time=10.0, kick_angle=6.5, kick_duration=14.0),
     "Electron (SSO)": dict(
         stages=[
@@ -111,7 +111,7 @@ PRESETS = {
         ],
         payload=200.0, fairing_mass=50.0, fairing_alt=80.0,
         site_lat=-39.2617, site_lon=177.8649, site_alt=20.0,
-        target_alt=500.0, target_inc=97.4,
+        target_alt=500.0, launch_azimuth_deg=347.8,
         vertical_time=8.0, kick_angle=7.0, kick_duration=12.0),
     "Small launcher (custom)": dict(
         stages=[
@@ -124,7 +124,7 @@ PRESETS = {
         ],
         payload=500.0, fairing_mass=120.0, fairing_alt=100.0,
         site_lat=12.5, site_lon=99.9, site_alt=5.0,
-        target_alt=450.0, target_inc=30.0,
+        target_alt=450.0, launch_azimuth_deg=62.0,
         vertical_time=10.0, kick_angle=6.0, kick_duration=15.0),
 }
 
@@ -207,9 +207,9 @@ with st.sidebar.expander("🎯 วงโคจรเป้าหมาย", expa
                                      float(base["target_alt"]), 10.0)
         target_apogee_alt = st.number_input("ความสูงเป้าหมาย (km)",
                                             1000.0, 1000000.0, 384400.0, 1000.0)
-    target_inc = st.number_input("ความเอียง (°)", 0.0, 180.0,
-                                 float(base["target_inc"]), 0.1)
-    east = st.checkbox("ยิงไปทางตะวันออก (ascending)", value=True)
+    launch_azimuth_deg = st.number_input("มุมยิงจากฐาน (Azimuth °)", 0.0, 360.0,
+                                         float(base["launch_azimuth_deg"]), 0.1,
+                                         help="0° เหนือ · 90° ตะวันออก · 180° ใต้ · 270° ตะวันตก")
 
 with st.sidebar.expander("🕐 เวลาปล่อย (UTC)"):
     c1, c2, c3 = st.columns(3)
@@ -368,7 +368,7 @@ with col_obs:
 
 cfg = dict(stages=stages_cfg, payload=payload, fairing_mass=fmass,
            fairing_alt=falt, site_lat=site_lat, site_lon=site_lon,
-           site_alt=site_alt, target_alt=target_alt, target_inc=target_inc,
+           site_alt=site_alt, target_alt=target_alt, launch_azimuth_deg=launch_azimuth_deg,
            vertical_time=vt, kick_angle=ka, kick_duration=kd,
            auto_profile=auto_prof)
 st.sidebar.download_button("💾 บันทึก preset",
@@ -415,9 +415,9 @@ if run:
             fairing_jettison_t=fair_t_val,
             payload_deploy_t=pay_t_val)
         mis = rp.Mission(site_lat=site_lat, site_lon=site_lon, site_alt=site_alt,
-                         target_alt=target_alt * 1e3, target_inc=target_inc,
+                         target_alt=target_alt * 1e3, launch_azimuth_deg=launch_azimuth_deg,
                          launch_jd=launch_jd, vertical_time=vt, kick_angle=ka,
-                         kick_duration=kd, ascend_east=east,
+                         kick_duration=kd,
                          mission_type=mission_type,
                          target_apogee_alt=target_apogee_alt * 1e3,
                          auto_profile=auto_prof)

@@ -3,7 +3,7 @@ let lastResult=null,lastPayload=null,mapObj=null;
 function setVal(id,v){if(v!==undefined&&v!==null&&$(id))$(id).value=v}
 function stageTimeline(stages){let t=0;return stages.map(s=>{const ign=t+Number(s.ignition_delay||0),cut=ign+Number(s.burn_time),sep=cut+2;t=sep;return {ignition_t:ign,cutoff_t:cut,separation_t:sep}})}
 function applyConfig(p){
- for(const k of ["payload","fairing_mass","fairing_alt","site_lat","site_lon","site_alt","target_alt","target_apogee_alt","target_inc","mission_type","vertical_time","kick_angle","kick_duration"])setVal(k,p[k]);
+ for(const k of ["payload","fairing_mass","fairing_alt","site_lat","site_lon","site_alt","target_alt","target_apogee_alt","launch_azimuth_deg","mission_type","vertical_time","kick_angle","kick_duration"])setVal(k,p[k]);
  $("stages").value=JSON.stringify(p.stages||[],null,2);
  $("boost_groups").value=JSON.stringify(p.boost_groups||[],null,2);
  $("use_boost").checked=!!p.use_boost;
@@ -11,7 +11,6 @@ function applyConfig(p){
  setVal("boost_throttle",p.boost_throttle??100);setVal("solo_throttle",p.solo_throttle??100);
  $("boost_auto_burn").checked=p.boost_auto_burn!==false;
  for(const k of ["obs_lat","obs_lon","obs_alt","min_elevation","timestep","orbit_count"])setVal(k,p[k]);
- if(p.ascend_east!==undefined)$("ascend_east").checked=!!p.ascend_east;
  if(p.auto_profile!==undefined){$("auto_profile").checked=!!p.auto_profile;$("manual-profile").classList.toggle("hidden",!!p.auto_profile)}
  $("mission_type").value=p.mission_type||"circular";
  $("target_apogee_alt").disabled=$("mission_type").value==="circular";
@@ -77,7 +76,7 @@ $("mission-form").addEventListener("submit",async ev=>{
  let stages,boostGroups=[],timeline=null;
  try{stages=JSON.parse($("stages").value);if(!Array.isArray(stages)||!stages.length||stages.length>5)throw Error("Stages ต้องเป็น JSON array จำนวน 1–5 สเตจ");if($("use_boost").checked){boostGroups=JSON.parse($("boost_groups").value||"[]");if(!Array.isArray(boostGroups)||!boostGroups.length||boostGroups.length>4)throw Error("Booster groups ต้องเป็น JSON array จำนวน 1–4 กลุ่ม")}if($("use_timeline").checked){const tStages=JSON.parse($("timeline_stages").value);if(!Array.isArray(tStages))throw Error("Timeline ต้องเป็น JSON array");timeline={stages:tStages,fairing_t:$("fairing_t").value===""?null:n("fairing_t"),payload_t:$("payload_t").value===""?null:n("payload_t")}}}catch(err){$("loading").classList.add("hidden");$("error").textContent="Input error: "+err.message;$("error").classList.remove("hidden");return}
  const launch=$("launch_utc").value;if(!launch){$("loading").classList.add("hidden");$("error").textContent="กรุณาระบุ Launch UTC";$("error").classList.remove("hidden");return}
- const p={stages,payload:n("payload"),fairing_mass:n("fairing_mass"),fairing_alt:n("fairing_alt"),site_lat:n("site_lat"),site_lon:n("site_lon"),site_alt:n("site_alt"),obs_lat:n("obs_lat"),obs_lon:n("obs_lon"),obs_alt:n("obs_alt"),target_alt:n("target_alt"),target_apogee_alt:n("target_apogee_alt"),target_inc:n("target_inc"),mission_type:$("mission_type").value,launch_utc:launch+":00Z",ascend_east:$("ascend_east").checked,auto_profile:$("auto_profile").checked,vertical_time:n("vertical_time"),kick_angle:n("kick_angle"),kick_duration:n("kick_duration"),min_elevation:n("min_elevation"),timestep:n("timestep"),orbit_count:n("orbit_count"),use_boost:$("use_boost").checked,boost_groups:boostGroups,boost_throttle:n("boost_throttle"),solo_throttle:n("solo_throttle"),boost_auto_burn:$("boost_auto_burn").checked,use_timeline:$("use_timeline").checked,timeline};
+ const p={stages,payload:n("payload"),fairing_mass:n("fairing_mass"),fairing_alt:n("fairing_alt"),site_lat:n("site_lat"),site_lon:n("site_lon"),site_alt:n("site_alt"),obs_lat:n("obs_lat"),obs_lon:n("obs_lon"),obs_alt:n("obs_alt"),target_alt:n("target_alt"),target_apogee_alt:n("target_apogee_alt"),launch_azimuth_deg:n("launch_azimuth_deg"),mission_type:$("mission_type").value,launch_utc:launch+":00Z",auto_profile:$("auto_profile").checked,vertical_time:n("vertical_time"),kick_angle:n("kick_angle"),kick_duration:n("kick_duration"),min_elevation:n("min_elevation"),timestep:n("timestep"),orbit_count:n("orbit_count"),use_boost:$("use_boost").checked,boost_groups:boostGroups,boost_throttle:n("boost_throttle"),solo_throttle:n("solo_throttle"),boost_auto_burn:$("boost_auto_burn").checked,use_timeline:$("use_timeline").checked,timeline};
  try{const r=await fetch("/api/simulate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});const d=await r.json();if(!r.ok)throw Error(d.detail||"API error");render(d,p)}catch(err){$("loading").classList.add("hidden");$("error").textContent="Simulation error: "+err.message;$("error").classList.remove("hidden")}
 });
 
@@ -156,7 +155,6 @@ function loadDatabaseRocket() {
     fairing_alt: version.fairing_alt ?? version.fairing_jettison_alt_km ?? 110,
     target_alt: version.target_alt ?? 550,
     target_apogee_alt: version.target_apogee_alt ?? version.target_alt ?? 550,
-    target_inc: version.target_inc ?? 53,
     mission_type: version.mission_type ?? "circular",
     site_lat: version.site_lat ?? n("site_lat"),
     site_lon: version.site_lon ?? n("site_lon"),

@@ -80,10 +80,9 @@ class SimulationInput(BaseModel):
     obs_alt: float = Field(default=0, ge=-500, le=5000)
     target_alt: float = Field(default=550, ge=120, le=2000)
     target_apogee_alt: float = Field(default=35786, ge=120, le=1000000)
-    target_inc: float = Field(default=53, ge=0, le=180)
+    launch_azimuth_deg: float = Field(default=75.3, ge=0, le=360, description="Earth-fixed launch azimuth clockwise from true north")
     mission_type: str = "circular"
     launch_utc: datetime
-    ascend_east: bool = True
     auto_profile: bool = True
     vertical_time: float = Field(default=10, ge=0, le=30)
     kick_angle: float = Field(default=6, ge=0, le=20)
@@ -268,10 +267,10 @@ def simulate(data: SimulationInput):
         )
         mission = rp.Mission(
             site_lat=data.site_lat, site_lon=data.site_lon, site_alt=data.site_alt,
-            target_alt=data.target_alt * 1000, target_inc=data.target_inc,
+            target_alt=data.target_alt * 1000, launch_azimuth_deg=data.launch_azimuth_deg,
             launch_jd=launch_jd, vertical_time=data.vertical_time,
             kick_angle=data.kick_angle, kick_duration=data.kick_duration,
-            ascend_east=data.ascend_east, mission_type=data.mission_type,
+            mission_type=data.mission_type,
             target_apogee_alt=(data.target_apogee_alt if data.mission_type != "circular"
                                else data.target_alt) * 1000,
             auto_profile=data.auto_profile
@@ -331,7 +330,7 @@ def simulate(data: SimulationInput):
                 "obs_lon": data.obs_lon, "obs_alt": data.obs_alt,
                 "mission_type": data.mission_type, "target_alt_km": data.target_alt,
                 "target_apogee_alt_km": data.target_apogee_alt,
-                "target_inc_deg": data.target_inc}
+                "launch_azimuth_deg": data.launch_azimuth_deg}
         })
     except HTTPException:
         raise
