@@ -70,9 +70,9 @@ function fillDbChildSelect(){
 }
 function fillDbVersionSelect(){
  const rid=$("db-version-rocket").value;
- const vs=(catalogData?.versions||[]).filter(v=>v.rocket_id===rid);
+ const allVs=(catalogData?.versions||[]).filter(v=>v.rocket_id===rid);\n const vs=allVs.filter(v=>v.status==="draft");
  $("db-version-select").innerHTML='<option value="">＋ สร้าง Draft ใหม่</option>'+vs.map(v=>'<option value="'+esc(v.id)+'">Revision '+esc(v.revision)+' · '+esc(v.status)+'</option>').join("");
- const next=Math.max(0,...vs.map(v=>Number(v.revision)||0))+1;
+ const next=Math.max(0,...allVs.map(v=>Number(v.revision)||0))+1;
  $("db-revision").value=next;
  fillDbVersionForm();
  $("db-child-version").innerHTML=vs.map(v=>'<option value="'+esc(v.id)+'">Revision '+esc(v.revision)+' · '+esc(v.status)+'</option>').join("");
