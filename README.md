@@ -29,7 +29,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-Open http://localhost:8000. API documentation is available at http://localhost:8000/docs and health at http://localhost:8000/api/health.
+Open http://localhost:8000. The admin console is at http://localhost:8000/admin. API documentation is available at http://localhost:8000/docs and health at http://localhost:8000/api/health.
 
 ## Deploy on Render
 
@@ -44,6 +44,24 @@ The Dockerfile runs FastAPI/Uvicorn. Streamlit is not required to run the browse
 
 - `GET /api/health` — service health and feature list.
 - `POST /api/simulate` — ascent, orbit, booster, mission-timeline and observer calculations.
+- `GET /api/public/rockets` and `/api/public/rockets/{slug}` — published/current rocket catalog.
+- `GET /api/public/rockets/export.json` and `/api/public/rockets/export.csv` — public catalog exports.
+- `GET /api/admin/me` and `/api/admin/rockets` — authenticated admin identity and catalog.
+- `POST /api/admin/rockets`, `PATCH /api/admin/rockets/{id}` — create/update rocket records.
+- `POST /api/admin/rockets/{id}/versions`, `PATCH /api/admin/versions/{id}` — create/edit draft revisions.
+- `POST /api/admin/versions/{id}/rocket_stages|rocket_boosters|rocket_sources` — add revision data.
+- `POST /api/admin/versions/{id}/publish` — publish a validated draft through the database RPC.
+
+### Supabase configuration
+
+Set these environment variables in Render (Dashboard → rocket-planner → Environment):
+
+- `SUPABASE_URL` — the Supabase project URL.
+- `SUPABASE_ANON_KEY` — the project's publishable/anon key.
+
+Do not set a service-role key in the browser or expose it to clients. The API forwards the signed-in user's Supabase access token to PostgREST so RLS remains in force. Public catalog routes use the anon key and can only read published/current records. Admin routes require a valid Supabase access token and an active row in `admin_users`.
+
+The admin JSON endpoints accept the corresponding database row fields; use the database schema as the source of truth for required columns. Draft publication is performed only by `publish_rocket_version`, not by directly changing status fields.
 
 The API request uses kN for thrust, kg for masses, km for target/fairing altitudes, metres for site/observer elevations, seconds for event times, degrees for angular values, and an ISO-8601 UTC launch epoch. See the browser form or OpenAPI schema for the full request shape.
 

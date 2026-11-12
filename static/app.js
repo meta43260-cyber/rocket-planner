@@ -91,3 +91,63 @@ $("mission-form").addEventListener("submit",async ev=>{
  const p={stages,payload:n("payload"),fairing_mass:n("fairing_mass"),fairing_alt:n("fairing_alt"),site_lat:n("site_lat"),site_lon:n("site_lon"),site_alt:n("site_alt"),obs_lat:n("obs_lat"),obs_lon:n("obs_lon"),obs_alt:n("obs_alt"),target_alt:n("target_alt"),target_apogee_alt:n("target_apogee_alt"),target_inc:n("target_inc"),mission_type:$("mission_type").value,launch_utc:launch+":00Z",ascend_east:$("ascend_east").checked,auto_profile:$("auto_profile").checked,vertical_time:n("vertical_time"),kick_angle:n("kick_angle"),kick_duration:n("kick_duration"),min_elevation:n("min_elevation"),timestep:n("timestep"),orbit_count:n("orbit_count"),use_boost:$("use_boost").checked,boost_groups:boostGroups,boost_throttle:n("boost_throttle"),solo_throttle:n("solo_throttle"),boost_auto_burn:$("boost_auto_burn").checked,use_timeline:$("use_timeline").checked,timeline};
  try{const r=await fetch("/api/simulate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});const d=await r.json();if(!r.ok)throw Error(d.detail||"API error");render(d,p)}catch(err){$("loading").classList.add("hidden");$("error").textContent="Simulation error: "+err.message;$("error").classList.remove("hidden")}
 });
+
+
+// Published Supabase rocket catalog integration. Existing local presets remain available offline.
+let databaseRockets = [];
+async function loadDatabaseRockets() {
+  const select = $("database-rocket");
+  if (!select) return;
+  try {
+    const response = await fetch("/api/public/rockets");
+    const data = await response.json();
+    if (!response.ok) throw Error(data.detail || "Database unavailable");
+    databaseRockets = Array.isArray(data) ? data : [];
+    select.innerHTML = '<option value="">— เลือกจรวดจากฐานข้อมูล —</option>' +
+      databaseRockets.map((r, i) => '<option value="' + i + '">' +
+        String(r.name || r.slug || ("Rocket " + (i + 1))).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])) +
+        '</option>').join("");
+    $("database-status").textContent = databaseRockets.length
+      ? "พบจรวดที่เผยแพร่ " + databaseRockets.length + " รายการ"
+      : "ยังไม่มีจรวดที่เผยแพร่ในฐานข้อมูล";
+  } catch (error) {
+    select.innerHTML = '<option value="">ฐานข้อมูลยังไม่พร้อมใช้งาน</option>';
+    $("database-status").textContent = error.message + " · ยังเลือก Preset ในเครื่องได้ตามปกติ";
+  }
+}
+function loadDatabaseRocket() {
+  const selected = $("database-rocket").value;
+  if (selected === "") return;
+  const index = Number(selected);
+  if (!Number.isInteger(index) || !databaseRockets[index]) return;
+  const rocket = databaseRockets[index];
+  const version = rocket.current_version || {};
+  const stages = version.stages || [];
+  if (!stages.length) {
+    $("database-status").textContent = "รายการนี้ยังไม่มี Stage data จึงยังนำไปจำลองไม่ได้";
+    return;
+  }
+  const boosters = version.boosters || [];
+  const config = {
+    ...version,
+    stages,
+    boost_groups: boosters,
+    use_boost: boosters.length > 0,
+    payload: version.payload ?? version.payload_mass ?? 0,
+    fairing_mass: version.fairing_mass ?? 0,
+    fairing_alt: version.fairing_alt ?? 110,
+    target_alt: version.target_alt ?? 550,
+    target_apogee_alt: version.target_apogee_alt ?? version.target_alt ?? 550,
+    target_inc: version.target_inc ?? 53,
+    mission_type: version.mission_type ?? "circular",
+    site_lat: version.site_lat ?? n("site_lat"),
+    site_lon: version.site_lon ?? n("site_lon"),
+    site_alt: version.site_alt ?? n("site_alt"),
+  };
+  applyConfig(config);
+  $("preset").value = "custom";
+  $("database-status").textContent = "โหลด " + (rocket.name || rocket.slug) +
+    " · Revision " + (version.version || version.version_number || version.id || "current");
+}
+$("database-rocket")?.addEventListener("change", loadDatabaseRocket);
+loadDatabaseRockets();

@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 import rocket_planner as rp
 import booster as bst
+import supabase_api
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -22,6 +23,7 @@ STATIC = ROOT / "static"
 app = FastAPI(title="Rocket Planner API", version="2.0.0",
               description="Rocket ascent, orbital mechanics, booster and observer-visibility simulator")
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
+app.include_router(supabase_api.router)
 
 
 class StageInput(BaseModel):
@@ -177,6 +179,11 @@ def event_rows(ascent, fairing_t=None, payload_t=None, fairing_alt=110):
 @app.get("/")
 def home():
     return FileResponse(STATIC / "index.html")
+
+
+@app.get("/admin")
+def admin_home():
+    return FileResponse(STATIC / "admin.html")
 
 
 @app.get("/api/health")

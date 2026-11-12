@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rocket Planner · Admin</title><link rel="stylesheet" href="/static/style.css">
+<style>
+.admin-wrap{max-width:980px;margin:30px auto;padding:0 16px}.admin-card{background:#101d2d;border:1px solid #26384d;border-radius:12px;padding:20px;margin:14px 0}.admin-card h2{font-size:18px}.admin-card label{display:block;color:#b6c7d8;font-size:12px;margin:10px 0}.admin-card input,.admin-card textarea{width:100%;display:block;margin-top:5px;background:#091523;color:#e8f0f8;border:1px solid #30445b;border-radius:6px;padding:10px;font:12px monospace}.admin-card textarea{min-height:130px}.admin-actions{display:flex;gap:8px;flex-wrap:wrap}.admin-actions button{background:#14263a;border:1px solid #36506a;color:#c8d8e8;padding:10px 14px;border-radius:6px}.admin-actions .primary{background:#52d6d0;color:#071720}.admin-status{white-space:pre-wrap;color:#a9c4d8;font-size:12px}.admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.admin-grid{grid-template-columns:1fr}}
+</style></head><body>
+<header class="topbar"><a class="brand" href="/"><span class="brand-mark">✦</span><span>ROCKET PLANNER<small>ADMIN CONSOLE</small></span></a><span class="top-status">DATABASE MANAGEMENT</span></header>
+<main class="admin-wrap">
+<section class="admin-card" id="login-panel"><h2>Admin sign in</h2><p class="hint">เข้าสู่ระบบด้วยบัญชี Admin ที่ลงทะเบียนไว้ใน Supabase Auth</p>
+<label>Email<input id="email" type="email" autocomplete="username"></label><label>Password<input id="password" type="password" autocomplete="current-password"></label>
+<div class="admin-actions"><button class="primary" id="login">เข้าสู่ระบบ</button></div></section>
+<section id="workspace" class="hidden">
+<div class="admin-card"><div class="admin-actions"><h2 id="who" style="margin-right:auto">Admin</h2><button id="refresh">โหลดข้อมูลใหม่</button><button id="logout">ออกจากระบบ</button></div><div id="status" class="admin-status">เชื่อมต่อแล้ว</div></div>
+<div class="admin-grid">
+<section class="admin-card"><h2>1 · เพิ่มจรวด</h2><p class="hint">กรอก JSON ตามคอลัมน์จริงของตาราง rockets</p><textarea id="rocket-json">{
+  "name": "Rocket name",
+  "slug": "rocket-name"
+}</textarea><div class="admin-actions"><button class="primary" id="create-rocket">สร้างจรวด</button></div></section>
+<section class="admin-card"><h2>2 · สร้าง Draft Revision</h2><label>Rocket ID<input id="rocket-id" placeholder="UUID จากขั้นตอนที่ 1"></label><p class="hint">ต้องระบุฟิลด์บังคับของ rocket_versions ตาม Schema</p><textarea id="version-json">{
+  "version": "1.0",
+  "notes": "Initial data entry"
+}</textarea><div class="admin-actions"><button class="primary" id="create-version">สร้าง Draft</button></div></section>
+</div>
+<section class="admin-card"><h2>3 · เพิ่มข้อมูลใน Revision</h2><label>Version ID<input id="version-id" placeholder="UUID ของ Draft"></label><label>ประเภทข้อมูล<select id="child-table"><option value="rocket_stages">Stages</option><option value="rocket_boosters">Boosters</option><option value="rocket_sources">Sources</option></select></label><p class="hint">วาง JSON object หนึ่งรายการ โดยใช้ชื่อคอลัมน์ตาม Schema ของตาราง</p><textarea id="child-json">{
+  "name": "Stage 1"
+}</textarea><div class="admin-actions"><button class="primary" id="add-child">เพิ่มข้อมูล</button></div></section>
+<section class="admin-card"><h2>4 · เผยแพร่ Revision</h2><p class="hint">เผยแพร่ได้เมื่อกรอกข้อมูลครบและผ่านเงื่อนไขฐานข้อมูลแล้ว</p><div class="admin-actions"><button class="primary" id="publish">Publish revision</button></div></section>
+<section class="admin-card"><h2>รายการจรวด / Revision</h2><pre id="catalog">กดโหลดข้อมูลใหม่</pre></section>
+</section></main><script src="/static/admin.js"></script></body></html>
