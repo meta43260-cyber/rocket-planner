@@ -145,6 +145,7 @@ function loadDatabaseRocket() {
     area: booster.reference_area_m2,
     ignite_t: booster.ignite_t_s ?? 0,
     jettison_delay: booster.jettison_delay_s ?? 2,
+    thrust_curve: booster.thrust_curve_json ?? null,
   }));
   const config = {
     ...version,
