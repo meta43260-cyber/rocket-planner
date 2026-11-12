@@ -49,6 +49,25 @@ class SupabaseREST:
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         if prefer:
             headers["Prefer"] = prefer
+
+        # urllib/http.client only permits Latin-1 header values. Supabase keys
+        # and JWTs are expected to be ASCII; catch copied Unicode/zero-width
+        # characters here and identify the setting without exposing its value.
+        for header_name, header_value in headers.items():
+            if not str(header_value).isascii():
+                setting = {
+                    "apikey": "SUPABASE_ANON_KEY",
+                    "Authorization": "SUPABASE access token",
+                }.get(header_name, f"{header_name} header")
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Invalid non-ASCII character in {setting}. Check the Render environment value."
+                )
+        if not self.url.isascii():
+            raise HTTPException(
+                status_code=503,
+                detail="SUPABASE_URL contains a non-ASCII character. Check the Render environment value."
+            )
         try:
             # Keep request construction inside the guarded block so malformed
             # configuration is reported as a diagnostic response, not a 500.
