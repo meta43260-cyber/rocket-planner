@@ -181,6 +181,11 @@ def home():
     return FileResponse(STATIC / "index.html")
 
 
+@app.get("/admin")
+def admin_home():
+    return FileResponse(STATIC / "admin.html")
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "engine": "rocket_planner", "version": app.version,
