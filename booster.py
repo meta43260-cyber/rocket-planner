@@ -10,13 +10,13 @@ def mdot(thrust_kN, isp_s):
 
 def make_group(name, count, thrust_sl, thrust_vac, isp_sl, isp_vac,
                prop_mass, dry_mass, burn_time, area,
-               ignite_t=0.0, jettison_delay=2.0):
+               ignite_t=0.0, jettison_delay=2.0, thrust_curve=None):
     return dict(name=name, count=int(count),
                 thrust_sl=thrust_sl, thrust_vac=thrust_vac,
                 isp_sl=isp_sl, isp_vac=isp_vac,
                 prop_mass=prop_mass, dry_mass=dry_mass,
                 burn_time=burn_time, area=area,
-                ignite_t=ignite_t, jettison_delay=jettison_delay)
+                ignite_t=ignite_t, jettison_delay=jettison_delay, thrust_curve=thrust_curve)
 
 def _is_burning(g, t):
     return g["ignite_t"] - EPS <= t < g["ignite_t"] + g["burn_time"] - EPS
@@ -59,6 +59,11 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
         ev.add(g["ignite_t"] + g["burn_time"] + g["jettison_delay"])
     t_last = max([T_core] + [g["ignite_t"] + g["burn_time"] + g["jettison_delay"]
                              for g in groups])
+    for g in groups:
+        for point in (g.get("thrust_curve") or []):
+            curve_t = g["ignite_t"] + float(point[0])
+            if g["ignite_t"] < curve_t < g["ignite_t"] + g["burn_time"]:
+                ev.add(curve_t)
     times = sorted(t for t in ev if -EPS <= t <= t_last + EPS)
     rem_boost = sum(g["count"] * g["prop_mass"] for g in groups)
     phases, log = [], []
@@ -75,11 +80,24 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
         # Missing booster sea-level data must not block a run. In that case use
         # the vacuum rating as a clearly warned upper-bound approximation; never
         # silently substitute a P120C value or invent a P160C sea-level datum.
+        def booster_vac(g, when):
+            curve = g.get("thrust_curve") or []
+            if not curve:
+                return g["thrust_vac"]
+            elapsed = max(0.0, when - g["ignite_t"])
+            if elapsed <= curve[0][0]: return curve[0][1]
+            for left, right in zip(curve, curve[1:]):
+                if left[0] <= elapsed <= right[0]:
+                    f = (elapsed-left[0]) / max(right[0]-left[0], EPS)
+                    return left[1] + f * (right[1]-left[1])
+            return curve[-1][1]
         F_sl = tau * core["thrust_sl"] + sum(
-            g["count"] * (g["thrust_sl"] if g["thrust_sl"] is not None else g["thrust_vac"])
-            for g in burning
+            g["count"] * (booster_vac(g, tm) + ((g["thrust_sl"] - g["thrust_vac"])
+            if g["thrust_sl"] is not None else 0.0)) for g in burning
         )
-        F_vac = tau * core["thrust_vac"] + sum(g["count"] * g["thrust_vac"] for g in burning)
+        F_vac = tau * core["thrust_vac"] + sum(g["count"] * booster_vac(g, tm) for g in burning)
+        phase_curve = [[0.0, tau * core["thrust_vac"] + sum(g["count"] * booster_vac(g, t0) for g in burning)]]
+        phase_curve.append([dt, tau * core["thrust_vac"] + sum(g["count"] * booster_vac(g, t1 - 1e-7) for g in burning)])
         w_sl = (tau * core["thrust_sl"] / core["isp_sl"]
                 + sum(
                     g["count"] * (g["thrust_sl"] if g["thrust_sl"] is not None else g["thrust_vac"])
@@ -90,7 +108,7 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
                  + sum(g["count"] * g["thrust_vac"] / g["isp_vac"] for g in burning))
         isp_sl = F_sl / w_sl if w_sl > 0 else core["isp_sl"]
         isp_vac = F_vac / w_vac if w_vac > 0 else core["isp_vac"]
-        want = sum(g["count"] * mdot(g["thrust_vac"], g["isp_vac"]) * dt
+        want = sum(g["count"] * mdot(booster_vac(g, tm), g["isp_vac"]) * dt
                    for g in burning)
         p_boost = min(want, rem_boost)
         rem_boost -= p_boost
@@ -109,7 +127,7 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
         phases.append(dict(name=name, thrust_sl=F_sl, thrust_vac=F_vac,
                            isp_sl=isp_sl, isp_vac=isp_vac,
                            prop_mass=p_core + p_boost, dry_mass=m_jett,
-                           burn_time=dt, area=area))
+                           burn_time=dt, area=area, thrust_curve=phase_curve))
         log.append(dict(t0=t0, t1=t1, name=name, F_sl=F_sl, isp_vac=isp_vac,
                         prop=p_core + p_boost, jett=m_jett,
                         twr_note=f"{tau*100:.0f}%"))
@@ -121,7 +139,7 @@ def validate(core, groups, phases):
     for g in groups:
         if g["thrust_sl"] is None and g["isp_sl"] is None:
             warn.append(
-                f'{g["name"]}: ไม่มีข้อมูล Thrust SL / ISP SL — ใช้ค่า Vacuum แทนชั่วคราว '
+                f'{g["name"]}: ไม่มีข้อมูล Thrust SL — ใช้ค่า Vacuum เป็นค่าประมาณ '
                 'ผลช่วงใกล้พื้นโลกอาจสูงเกินจริง'
             )
     total_p = sum(p["prop_mass"] for p in phases)
