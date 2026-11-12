@@ -49,8 +49,10 @@ class SupabaseREST:
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         if prefer:
             headers["Prefer"] = prefer
-        req = Request(f"{self.url}{path}", data=data, headers=headers, method=method)
         try:
+            # Keep request construction inside the guarded block so malformed
+            # configuration is reported as a diagnostic response, not a 500.
+            req = Request(f"{self.url}{path}", data=data, headers=headers, method=method)
             with urlopen(req, timeout=15) as response:
                 raw = response.read()
                 if not raw:
@@ -74,8 +76,14 @@ class SupabaseREST:
         except HTTPException:
             raise
         except Exception as exc:
-            logger.exception("Unexpected Supabase REST failure for %s %s (%s)", method, path, type(exc).__name__)
-            raise HTTPException(status_code=502, detail="Supabase request could not be processed.") from exc
+            error_type = type(exc).__name__
+            logger.exception("Unexpected Supabase REST failure for %s %s (%s)", method, path, error_type)
+            # The exception class is safe to show; never expose exception text,
+            # request headers, URLs with credentials, or Supabase response bodies.
+            raise HTTPException(
+                status_code=502,
+                detail=f"Supabase request could not be processed (diagnostic: {error_type})."
+            ) from exc
 
 
 def _rows(client: SupabaseREST, table: str, query: dict[str, str] | None = None):
