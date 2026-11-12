@@ -37,11 +37,11 @@ class SupabaseREST:
             )
         self.access_token = access_token or self.anon_key
 
-    def call(self, path: str, *, method: str = "GET", body=None, prefer=None):
+    def call(self, path: str, *, method: str = "GET", body=None, prefer=None, accept="application/json"):
         headers = {
             "apikey": self.anon_key,
             "Authorization": f"Bearer {self.access_token}",
-            "Accept": "application/json",
+            "Accept": accept,
         }
         data = None
         if body is not None:
@@ -213,6 +213,42 @@ def admin_rockets(authorization: str | None = Header(default=None)):
         "rockets": _rows(client, "rockets"),
         "versions": _rows(client, "rocket_versions"),
     }
+
+@router.get("/admin/schema")
+def admin_schema(authorization: str | None = Header(default=None)):
+    """Return only the columns needed to build valid catalog records."""
+    client = _admin_client(authorization)
+    spec = client.call("/rest/v1/", accept="application/openapi+json")
+    if not isinstance(spec, dict):
+        raise HTTPException(status_code=502, detail="Supabase schema description is unavailable.")
+
+    definitions = spec.get("definitions") or spec.get("components", {}).get("schemas", {})
+    wanted = {"rockets", "rocket_versions", "rocket_stages", "rocket_boosters", "rocket_sources"}
+    tables = {}
+    for name, schema in definitions.items():
+        base_name = name
+        for suffix in ("_insert", "_update"):
+            if name.endswith(suffix):
+                base_name = name[:-len(suffix)]
+                break
+        if base_name not in wanted or not isinstance(schema, dict):
+            continue
+        properties = schema.get("properties", {})
+        tables[name] = {
+            "required": schema.get("required", []),
+            "columns": {
+                column: {
+                    "type": detail.get("type"),
+                    "format": detail.get("format"),
+                    "default": detail.get("default"),
+                    "description": detail.get("description"),
+                }
+                for column, detail in properties.items() if isinstance(detail, dict)
+            },
+        }
+    if not tables:
+        raise HTTPException(status_code=502, detail="Supabase did not expose table definitions.")
+    return {"tables": tables}
 
 
 from fastapi import Body
