@@ -137,7 +137,14 @@ $("db-save-child").onclick=async()=>{
   const vid=dbVal("db-child-version"),kind=$("db-child-type").value,id=dbVal("db-child-select");
   if(!vid)throw Error("เลือก Revision ก่อน");
   const payload={};$("db-child-fields").querySelectorAll("[data-db-field]").forEach(el=>{const v=el.value.trim();if(v!=="")payload[el.dataset.dbField]=el.type==="number"?Number(v):v});
-  if(kind==="rocket_stages"&&!payload.stage_number)throw Error("กรอกลำดับ Stage");
+  if(kind==="rocket_stages"){
+   // Explicit null clears previously saved optional SL values in Supabase.
+   for(const key of ["thrust_sl_kn","isp_sl_s"])if(!(key in payload))payload[key]=null;
+   if(!payload.stage_number)throw Error("กรอกลำดับ Stage");
+   const hasSlThrust=payload.thrust_sl_kn!==null,hasSlIsp=payload.isp_sl_s!==null;
+   if(Number(payload.stage_number)===1&&(!hasSlThrust||!hasSlIsp))throw Error("Stage 1 ต้องกรอกทั้ง Thrust SL และ ISP SL");
+   if(hasSlThrust!==hasSlIsp)throw Error("กรอกทั้ง Thrust SL และ ISP SL หรือเว้นว่างทั้งคู่");
+  }
   if(kind==="rocket_sources"&&!payload.title)throw Error("กรอกชื่อแหล่งข้อมูล");
   const saved=id?await api("/admin/"+kind+"/"+encodeURIComponent(id),"PATCH",payload):await api("/admin/versions/"+encodeURIComponent(vid)+"/"+kind,"POST",payload);
   status(id?"แก้ไขข้อมูลแล้ว":"เพิ่มข้อมูลแล้ว");await load();$("db-child-version").value=vid;fillDbChildSelect();if(saved.id)$("db-child-select").value=saved.id;$("db-child-select").dispatchEvent(new Event("change"));
