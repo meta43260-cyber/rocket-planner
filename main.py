@@ -148,24 +148,46 @@ def records(df, columns=None, stride=1):
     return clean(view.to_dict(orient="records"))
 
 
-def event_rows(ascent, fairing_t=None, payload_t=None, fairing_alt=110):
+def event_rows(ascent, fairing_t=None, payload_t=None, fairing_alt=110,
+               timeline_stages=None, timeline_has_boosters=False):
     events = []
     names = [n for n in ascent["stage"].dropna().unique() if n != "coast"]
     first = names[0] if names else None
+
+    def add_event(label, t_event):
+        row = ascent.iloc[(ascent["t"] - float(t_event)).abs().idxmin()]
+        events.append({"event": label, "t": float(t_event),
+                       "alt_km": float(row.alt_km),
+                       "velocity_mps": float(row.v_relative)})
+
     for name in names:
         subset = ascent[ascent["stage"] == name]
-        powered = subset[subset["thrust_kN"] > 0.1]
-        if name != first and not subset.empty:
+        powered = subset[subset["thrust_kN"] > 0.1].copy()
+        if timeline_stages is None and name != first and not subset.empty:
             row = subset.iloc[0]
             events.append({"event": f"{name} — separation", "t": float(row.t),
                            "alt_km": float(row.alt_km), "velocity_mps": float(row.v_relative)})
         if not powered.empty:
-            row = powered.iloc[0]
-            events.append({"event": f"{name} — ignition", "t": float(row.t),
-                           "alt_km": float(row.alt_km), "velocity_mps": float(row.v_relative)})
-            row = powered.iloc[-1]
-            events.append({"event": f"{name} — cutoff", "t": float(row.t),
-                           "alt_km": float(row.alt_km), "velocity_mps": float(row.v_relative)})
+            # A gap in powered samples marks a cutoff/coast/restart sequence.
+            powered = powered.sort_values("t")
+            segment_ids = powered["t"].diff().fillna(0).gt(0.75).cumsum()
+            segments = list(powered.groupby(segment_ids))
+            for number, (_, segment) in enumerate(segments, start=1):
+                first_row, last_row = segment.iloc[0], segment.iloc[-1]
+                suffix = "" if len(segments) == 1 else f" #{number}"
+                events.append({"event": f"{name} — ignition{suffix}",
+                               "t": float(first_row.t), "alt_km": float(first_row.alt_km),
+                               "velocity_mps": float(first_row.v_relative)})
+                events.append({"event": f"{name} — cutoff{suffix}",
+                               "t": float(last_row.t), "alt_km": float(last_row.alt_km),
+                               "velocity_mps": float(last_row.v_relative)})
+
+    if timeline_stages is not None:
+        for i, timeline_stage in enumerate(timeline_stages):
+            if timeline_has_boosters and i == 0:
+                continue
+            add_event(f"Stage {i + 1} — separation (timeline)",
+                      timeline_stage.separation_t)
     if fairing_t is not None:
         row = ascent.iloc[(ascent["t"] - fairing_t).abs().idxmin()]
         events.append({"event": "Fairing jettison (timeline)", "t": float(row.t),
@@ -364,7 +386,11 @@ def simulate(data: SimulationInput):
             "orbit": records(orbit, ["t","lat","lon","alt_km"]),
             "look": records(look, ["t","az_deg","el_deg","range_km","alt_km",
                 "sun_el_deg","rocket_sunlit","photo_window","angular_rate"]),
-            "events": event_rows(ascent, fair_t, payload_t, data.fairing_alt),
+            "events": event_rows(
+                ascent, fair_t, payload_t, data.fairing_alt,
+                data.timeline.stages if data.use_timeline and data.timeline else None,
+                data.use_boost
+            ),
             "boost_log": boost_log, "boost_warnings": boost_warnings,
             "report": rp.photo_report(look, data.min_elevation),
             "launch_utc": data.launch_utc.isoformat(),
