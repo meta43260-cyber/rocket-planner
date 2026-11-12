@@ -1,0 +1,14 @@
+const $=id=>document.getElementById(id);let token=sessionStorage.getItem("rp_admin_token")||"";
+function status(x){$("status").textContent=typeof x==="string"?x:JSON.stringify(x,null,2)}
+async function api(path,method="GET",body){const headers={};if(token)headers.Authorization="Bearer "+token;if(body!==undefined)headers["Content-Type"]="application/json";const r=await fetch("/api"+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.detail||"Request failed: "+r.status);return d}
+function parse(id){try{return JSON.parse($(id).value)}catch(e){throw Error("JSON ไม่ถูกต้อง ("+id+"): "+e.message)}}
+async function load(){const me=await api("/admin/me");$("who").textContent=me.user.email+" · ADMIN";const data=await api("/admin/rockets");$("catalog").textContent=JSON.stringify(data,null,2);status("เชื่อมต่อฐานข้อมูลแล้ว")}
+function show(){ $("login-panel").classList.toggle("hidden",!!token);$("workspace").classList.toggle("hidden",!token)}
+$("login").onclick=async()=>{try{const r=await fetch("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:$("email").value,password:$("password").value})});const d=await r.json();if(!r.ok)throw Error(d.detail||"Login failed");token=d.access_token;sessionStorage.setItem("rp_admin_token",token);$("password").value="";show();await load()}catch(e){alert(e.message)}};
+$("logout").onclick=()=>{token="";sessionStorage.removeItem("rp_admin_token");show()};
+$("refresh").onclick=()=>load().catch(e=>status(e.message));
+$("create-rocket").onclick=async()=>{try{const d=await api("/admin/rockets","POST",parse("rocket-json"));$("rocket-id").value=d.id||"";status({created:d});await load()}catch(e){status(e.message)}};
+$("create-version").onclick=async()=>{try{const id=$("rocket-id").value.trim();if(!id)throw Error("กรุณาระบุ Rocket ID");const d=await api("/admin/rockets/"+encodeURIComponent(id)+"/versions","POST",parse("version-json"));$("version-id").value=d.id||"";status({draft_created:d});await load()}catch(e){status(e.message)}};
+$("add-child").onclick=async()=>{try{const id=$("version-id").value.trim();if(!id)throw Error("กรุณาระบุ Version ID");const d=await api("/admin/versions/"+encodeURIComponent(id)+"/"+$("child-table").value,"POST",parse("child-json"));status({inserted:d});await load()}catch(e){status(e.message)}};
+$("publish").onclick=async()=>{try{const id=$("version-id").value.trim();if(!id)throw Error("กรุณาระบุ Version ID");if(!confirm("ยืนยันเผยแพร่ Revision นี้?"))return;const d=await api("/admin/versions/"+encodeURIComponent(id)+"/publish","POST");status({published:d});await load()}catch(e){status(e.message)}};
+show();if(token)load().catch(e=>{status(e.message);token="";sessionStorage.removeItem("rp_admin_token");show()});
