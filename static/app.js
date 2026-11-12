@@ -134,9 +134,9 @@ function loadDatabaseRocket() {
   const boosters = (version.boosters || []).map(booster => ({
     name: booster.name || "SRB",
     count: booster.quantity,
-    thrust_sl: booster.thrust_sl_kn,
+    thrust_sl: booster.thrust_sl_kn ?? null,
     thrust_vac: booster.thrust_vac_kn,
-    isp_sl: booster.isp_sl_s,
+    isp_sl: booster.isp_sl_s ?? null,
     isp_vac: booster.isp_vac_s,
     prop_mass: booster.prop_mass_kg,
     dry_mass: booster.dry_mass_kg,
