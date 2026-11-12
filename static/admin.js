@@ -31,7 +31,8 @@ function renderCatalog(data){
      '<div class="version-actions"><button type="button" data-rocket="'+esc(r.id)+'" data-version="'+esc(v.id)+'">เลือก Revision นี้เพื่อจัดการ</button><span>สถานะ: '+esc(v.status)+(v.is_current?' · Current':'')+'</span></div></section>'
    }).join(""):'<p class="muted">ยังไม่มี Revision</p>')+'</article>'
  }).join("");
- refreshDbSelects();\n root.querySelectorAll("[data-version]").forEach(btn=>btn.addEventListener("click",()=>{
+ refreshDbSelects();
+ root.querySelectorAll("[data-version]").forEach(btn=>btn.addEventListener("click",()=>{
   $("rocket-id").value=btn.dataset.rocket;$("version-id").value=btn.dataset.version;
   status("เลือก Rocket และ Revision แล้ว");$("version-id").scrollIntoView({behavior:"smooth",block:"center"})
  }));
