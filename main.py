@@ -28,9 +28,10 @@ app.include_router(supabase_api.router)
 
 class StageInput(BaseModel):
     name: str = "Stage"
-    thrust_sl: float = Field(gt=0, description="Sea-level thrust, kN")
+    # Sea-level values are optional only for upper stages that ignite in near-vacuum.
+    thrust_sl: float | None = Field(default=None, gt=0, description="Sea-level thrust, kN; required for Stage 1")
     thrust_vac: float = Field(gt=0, description="Vacuum thrust, kN")
-    isp_sl: float = Field(gt=0)
+    isp_sl: float | None = Field(default=None, gt=0, description="Sea-level ISP; required for Stage 1")
     isp_vac: float = Field(gt=0)
     prop_mass: float = Field(gt=0, description="Propellant mass, kg")
     dry_mass: float = Field(ge=0, description="Dry mass, kg")
@@ -198,6 +199,14 @@ def simulate(data: SimulationInput):
         raise HTTPException(422, "mission_type must be circular, elliptical or escape")
     if data.use_boost and not data.boost_groups:
         raise HTTPException(422, "Add at least one booster group or disable Side Booster.")
+    # Stage 1 starts at the launch site and therefore needs both sea-level values
+    # for the initial TWR estimate. Upper stages may omit both only when they
+    # ignite in near-vacuum; supplying just one is an inconsistent engine model.
+    if data.stages[0].thrust_sl is None or data.stages[0].isp_sl is None:
+        raise HTTPException(422, "Stage 1 requires both sea-level thrust and sea-level ISP.")
+    for i, stage in enumerate(data.stages[1:], start=2):
+        if (stage.thrust_sl is None) != (stage.isp_sl is None):
+            raise HTTPException(422, f"Stage {i}: enter both sea-level thrust and ISP, or leave both blank.")
     if data.use_timeline:
         if not data.timeline or len(data.timeline.stages) != len(data.stages):
             raise HTTPException(422, "Timeline must contain one event row for every original core stage.")
@@ -245,8 +254,10 @@ def simulate(data: SimulationInput):
                 max_time = max(max_time, payload_t + 1800.0)
 
         stages = [rp.Stage(
-            s.get("name", f"Stage {i + 1}"), s["thrust_sl"] * 1000,
-            s["thrust_vac"] * 1000, s["isp_sl"], s["isp_vac"],
+            s.get("name", f"Stage {i + 1}"),
+            s["thrust_sl"] * 1000 if s.get("thrust_sl") is not None else None,
+            s["thrust_vac"] * 1000,
+            s.get("isp_sl"), s["isp_vac"],
             s["prop_mass"], s["dry_mass"], s["burn_time"], s["area"],
             float(s.get("ignition_delay", 0.0))
         ) for i, s in enumerate(stages_cfg)]
