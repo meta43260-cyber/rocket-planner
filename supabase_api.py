@@ -239,3 +239,27 @@ def add_version_child(version_id: str, child_table: str, payload: dict = Body(..
     if child_table not in {"rocket_stages", "rocket_boosters", "rocket_sources"}:
         raise HTTPException(status_code=404, detail="Unsupported revision data type.")
     return _insert(client, child_table, {**payload, "version_id": version_id})
+
+
+@router.post("/admin/login")
+def admin_login(credentials: dict = Body(...)):
+    email = str(credentials.get("email", "")).strip()
+    password = credentials.get("password")
+    if not email or not isinstance(password, str) or not password:
+        raise HTTPException(status_code=400, detail="Email and password are required.")
+    client = SupabaseREST()
+    try:
+        session = client.call("/auth/v1/token?grant_type=password", method="POST",
+                              body={"email": email, "password": password})
+    except HTTPException as exc:
+        if exc.status_code in (401, 403):
+            raise HTTPException(status_code=401, detail="Email or password is incorrect.") from exc
+        raise
+    if not isinstance(session, dict) or not session.get("access_token"):
+        raise HTTPException(status_code=401, detail="Supabase did not return a valid session.")
+    verified = SupabaseREST(session["access_token"])
+    user = _require_admin(verified)
+    return {"access_token": session["access_token"],
+            "refresh_token": session.get("refresh_token"),
+            "expires_in": session.get("expires_in"),
+            "user": {"id": user.get("id"), "email": user.get("email")}}
