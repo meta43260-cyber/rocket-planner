@@ -155,6 +155,8 @@ def event_rows(ascent, fairing_t=None, payload_t=None, fairing_alt=110,
     first = names[0] if names else None
 
     def add_event(label, t_event):
+        if float(t_event) > float(ascent["t"].iloc[-1]) + 1e-9:
+            return
         row = ascent.iloc[(ascent["t"] - float(t_event)).abs().idxmin()]
         events.append({"event": label, "t": float(t_event),
                        "alt_km": float(row.alt_km),
@@ -278,6 +280,9 @@ def simulate(data: SimulationInput):
             if i and first_ignition < previous_sep and not (data.use_boost and i == 0):
                 raise HTTPException(422, f"Stage {i + 1} ignition precedes previous stage separation.")
             previous_sep = row.separation_t
+        if (data.timeline.payload_t is not None
+                and data.timeline.payload_t < windows[-1].cutoff_t):
+            raise HTTPException(422, "Payload deployment cannot precede the final stage's last engine cutoff.")
     try:
         launch_jd = jd_from_datetime(data.launch_utc)
         original = [s.model_dump() if hasattr(s, "model_dump") else s.dict() for s in data.stages]
@@ -321,8 +326,10 @@ def simulate(data: SimulationInput):
                     stage["ignition_delay"] = max(windows[0].ignition_t - prev_sep, 0.0)
             fair_t = data.timeline.fairing_t
             payload_t = data.timeline.payload_t
+            timeline_end = max(row.separation_t for row in rows)
+            max_time = max(max_time, timeline_end + 2.0)
             if payload_t is not None:
-                max_time = max(max_time, payload_t + 1800.0)
+                max_time = max(max_time, payload_t + 2.0)
 
         stages = [rp.Stage(
             s.get("name", f"Stage {i + 1}"),
