@@ -57,10 +57,18 @@ class BoosterInput(BaseModel):
     jettison_delay: float = Field(default=2, ge=0, le=300)
 
 
-class TimelineStage(BaseModel):
+class TimelineBurn(BaseModel):
     ignition_t: float = Field(ge=0, le=100000)
     cutoff_t: float = Field(gt=0, le=100000)
+
+
+class TimelineStage(BaseModel):
+    # Legacy single-burn fields remain accepted for existing saved timelines.
+    ignition_t: float | None = Field(default=None, ge=0, le=100000)
+    cutoff_t: float | None = Field(default=None, gt=0, le=100000)
     separation_t: float = Field(ge=0, le=100000)
+    # Multiple ignition/cutoff pairs for restartable stages.
+    burns: list[TimelineBurn] = Field(default_factory=list, max_length=10)
 
 
 class TimelineInput(BaseModel):
@@ -220,9 +228,23 @@ def simulate(data: SimulationInput):
             raise HTTPException(422, "Timeline must contain one event row for every original core stage.")
         previous_sep = -1.0
         for i, row in enumerate(data.timeline.stages):
-            if row.cutoff_t <= row.ignition_t or row.separation_t < row.cutoff_t:
-                raise HTTPException(422, f"Invalid ignition/cutoff/separation times for stage {i + 1}.")
-            if i and row.ignition_t < previous_sep and not (data.use_boost and i == 0):
+            windows = row.burns or (
+                [TimelineBurn(ignition_t=row.ignition_t, cutoff_t=row.cutoff_t)]
+                if row.ignition_t is not None and row.cutoff_t is not None else []
+            )
+            if not windows:
+                raise HTTPException(422, f"Stage {i + 1}: provide ignition_t/cutoff_t or a non-empty burns array.")
+            previous_cut = -1.0
+            for burn in windows:
+                if burn.cutoff_t <= burn.ignition_t:
+                    raise HTTPException(422, f"Stage {i + 1}: each cutoff must be after its ignition.")
+                if burn.ignition_t < previous_cut:
+                    raise HTTPException(422, f"Stage {i + 1}: burn windows must be ordered and must not overlap.")
+                previous_cut = burn.cutoff_t
+            if row.separation_t < previous_cut:
+                raise HTTPException(422, f"Stage {i + 1}: separation cannot occur before the final cutoff.")
+            first_ignition = windows[0].ignition_t
+            if i and first_ignition < previous_sep and not (data.use_boost and i == 0):
                 raise HTTPException(422, f"Stage {i + 1} ignition precedes previous stage separation.")
             previous_sep = row.separation_t
     try:
@@ -252,10 +274,20 @@ def simulate(data: SimulationInput):
                 if index < 0 or index >= len(stages_cfg):
                     continue
                 stage = stages_cfg[index]
-                stage["burn_time"] = max(row.cutoff_t - row.ignition_t, 0.1)
+                windows = row.burns or [
+                    TimelineBurn(ignition_t=row.ignition_t, cutoff_t=row.cutoff_t)
+                ]
+                stage["burn_windows"] = [
+                    (float(burn.ignition_t), float(burn.cutoff_t))
+                    for burn in windows
+                ]
+                stage["burn_time"] = sum(
+                    cutoff - ignition for ignition, cutoff in stage["burn_windows"]
+                )
+                stage["separation_t"] = float(row.separation_t)
                 if i > 0:
                     prev_sep = rows[i - 1].separation_t
-                    stage["ignition_delay"] = max(row.ignition_t - prev_sep, 0.0)
+                    stage["ignition_delay"] = max(windows[0].ignition_t - prev_sep, 0.0)
             fair_t = data.timeline.fairing_t
             payload_t = data.timeline.payload_t
             if payload_t is not None:
@@ -267,7 +299,9 @@ def simulate(data: SimulationInput):
             s["thrust_vac"] * 1000,
             s.get("isp_sl"), s["isp_vac"],
             s["prop_mass"], s["dry_mass"], s["burn_time"], s["area"],
-            float(s.get("ignition_delay", 0.0))
+            float(s.get("ignition_delay", 0.0)),
+            s.get("burn_windows"),
+            s.get("separation_t")
         ) for i, s in enumerate(stages_cfg)]
         vehicle = rp.Vehicle(
             stages=stages, payload=data.payload, fairing_mass=data.fairing_mass,
