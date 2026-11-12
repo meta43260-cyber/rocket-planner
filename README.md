@@ -29,7 +29,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-Open http://localhost:8000. API documentation is available at http://localhost:8000/docs and health at http://localhost:8000/api/health.
+Open http://localhost:8000. The admin console is at http://localhost:8000/admin. API documentation is available at http://localhost:8000/docs and health at http://localhost:8000/api/health.
 
 ## Deploy on Render
 
