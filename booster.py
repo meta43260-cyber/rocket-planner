@@ -72,10 +72,20 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
         burning = [g for g in groups if _is_burning(g, tm)]
         attached = [g for g in groups if _is_attached(g, tm)]
         tau = _core_throttle(groups, tm, tau_b, tau_s) if core_on else 0.0
-        F_sl = tau * core["thrust_sl"] + sum(g["count"] * g["thrust_sl"] for g in burning)
+        # Missing booster sea-level data must not block a run. In that case use
+        # the vacuum rating as a clearly warned upper-bound approximation; never
+        # silently substitute a P120C value or invent a P160C sea-level datum.
+        F_sl = tau * core["thrust_sl"] + sum(
+            g["count"] * (g["thrust_sl"] if g["thrust_sl"] is not None else g["thrust_vac"])
+            for g in burning
+        )
         F_vac = tau * core["thrust_vac"] + sum(g["count"] * g["thrust_vac"] for g in burning)
         w_sl = (tau * core["thrust_sl"] / core["isp_sl"]
-                + sum(g["count"] * g["thrust_sl"] / g["isp_sl"] for g in burning))
+                + sum(
+                    g["count"] * (g["thrust_sl"] if g["thrust_sl"] is not None else g["thrust_vac"])
+                    / (g["isp_sl"] if g["isp_sl"] is not None else g["isp_vac"])
+                    for g in burning
+                ))
         w_vac = (tau * core["thrust_vac"] / core["isp_vac"]
                  + sum(g["count"] * g["thrust_vac"] / g["isp_vac"] for g in burning))
         isp_sl = F_sl / w_sl if w_sl > 0 else core["isp_sl"]
@@ -108,6 +118,12 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
 
 def validate(core, groups, phases):
     warn = []
+    for g in groups:
+        if g["thrust_sl"] is None and g["isp_sl"] is None:
+            warn.append(
+                f'{g["name"]}: ไม่มีข้อมูล Thrust SL / ISP SL — ใช้ค่า Vacuum แทนชั่วคราว '
+                'ผลช่วงใกล้พื้นโลกอาจสูงเกินจริง'
+            )
     total_p = sum(p["prop_mass"] for p in phases)
     avail = core["prop_mass"] + sum(
         min(g["count"] * g["prop_mass"],
