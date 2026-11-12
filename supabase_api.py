@@ -28,8 +28,9 @@ class SupabaseREST:
         self.url = os.getenv("SUPABASE_URL", "").rstrip("/")
         self.anon_key = os.getenv("SUPABASE_ANON_KEY", "")
         if not self.url or not self.anon_key:
-            raise SupabaseConfigError(
-                "Supabase is not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY."
+            raise HTTPException(
+                status_code=503,
+                detail="Supabase is not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY."
             )
         self.access_token = access_token or self.anon_key
 
