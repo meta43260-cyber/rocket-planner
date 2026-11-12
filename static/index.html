@@ -31,19 +31,23 @@
 <div class="section-label">04 · OBSERVER LOCATION</div>
 <div class="two"><label>ละติจูดผู้ชม °<input id="obs_lat" type="number" step=".0001" value="13.6904" required></label><label>ลองจิจูดผู้ชม °<input id="obs_lon" type="number" step=".0001" value="101.0779" required></label></div>
 <label>ความสูงผู้ชม (m)<input id="obs_alt" type="number" step="1" value="5"></label>
-<div class="section-label">05 · CORE VEHICLE</div>
-<div class="two"><label>Payload mass kg<input id="payload" type="number" min="0" value="2367"></label><label>Fairing mass kg<input id="fairing_mass" type="number" min="0" value="1200"></label></div>
-<label>Fairing jettison altitude km<input id="fairing_alt" type="number" min="40" max="200" value="115"></label>
+<div class="section-label">05 · MISSION-SPECIFIC DATA · กรอกใหม่ตามแต่ละเที่ยวบิน</div>
+<p class="hint">ข้อมูลส่วนนี้เปลี่ยนได้ทุกภารกิจ ไม่ใช่คุณสมบัติถาวรของตัวจรวด ค่าที่โหลดจากฐานข้อมูลเป็นเพียงค่าเริ่มต้นและแก้ไขได้</p>
+<div class="two"><label>Payload mass · น้ำหนัก Payload (kg)<input id="payload" type="number" min="0" value="2367"></label><label>Fairing jettison altitude · ระดับสลัด Fairing (km)<input id="fairing_alt" type="number" min="40" max="200" value="115"></label></div>
+<label>Payload deployment · เวลาปล่อย Payload (T+ seconds)<input id="payload_t" type="number" min="0" placeholder="เว้นว่าง = ไม่กำหนด"></label>
+<div class="section-label">06 · CORE VEHICLE · ข้อมูลประจำรุ่นจรวด</div>
+<p class="hint">มวล Fairing, มวลแห้ง/เชื้อเพลิง แรงขับ ISP และเวลาการเผาไหม้เป็นข้อมูลประจำรุ่น แก้ไขเมื่อเปลี่ยนรุ่นหรือ revision</p>
+<label>Fairing mass · มวล Fairing (kg)<input id="fairing_mass" type="number" min="0" value="1200"></label>
 <label>จำนวนสเตจ (แก้ไขรายละเอียดใน JSON)<span class="hint">รองรับ 1–5 สเตจ · หน่วยแรงขับ kN / มวล kg / เวลา s / พื้นที่ m²</span><textarea id="stages" rows="12" spellcheck="false"></textarea></label>
-<div class="section-label">06 · SIDE BOOSTERS (STRAP-ON)</div>
+<div class="section-label">07 · SIDE BOOSTERS (STRAP-ON)</div>
 <label class="check"><input id="use_boost" type="checkbox"> เปิดใช้งาน Side Booster</label>
 <div id="boost-fields" class="subpanel hidden"><label>Booster groups JSON <span class="hint">หลายกลุ่ม / จุดเครื่องต่างเวลา / สลัดหน่วง</span><textarea id="boost_groups" rows="8" spellcheck="false"></textarea></label>
 <div class="two"><label>Core throttle ขณะมี booster %<input id="boost_throttle" type="number" min="20" max="100" value="100"></label><label>Core throttle หลังสลัด %<input id="solo_throttle" type="number" min="50" max="100" value="100"></label></div>
 <label class="check"><input id="boost_auto_burn" type="checkbox" checked> คำนวณเวลาเผา core ใหม่อัตโนมัติ</label></div>
-<div class="section-label">07 · REAL MISSION TIMELINE</div>
+<div class="section-label">08 · FLIGHT-SPECIFIC EVENT TIMELINE · เวลาเหตุการณ์ของเที่ยวบินนี้</div>
 <label class="check"><input id="use_timeline" type="checkbox"> ใช้ Timeline เหตุการณ์จริง (T+ seconds)</label>
-<div id="timeline-fields" class="subpanel hidden"><p class="hint">ใส่เวลา ignition_t, cutoff_t และ separation_t ของแต่ละ core stage เป็นวินาทีหลัง liftoff ระบบคำนวณ burn duration / coast delay ให้</p><label>Stage timeline JSON<textarea id="timeline_stages" rows="8" spellcheck="false"></textarea></label><div class="two"><label>Fairing jettison T+ s<input id="fairing_t" type="number" min="0" placeholder="เว้นว่าง = ตาม altitude"></label><label>Payload deployment T+ s<input id="payload_t" type="number" min="0" placeholder="เว้นว่าง = ไม่กำหนด"></label></div></div>
-<div class="section-label">08 · ASCENT & NUMERICAL SETTINGS</div>
+<div id="timeline-fields" class="subpanel hidden"><p class="hint">ใส่เวลา ignition_t, cutoff_t และ separation_t ของแต่ละ core stage เป็นวินาทีหลัง liftoff ระบบคำนวณ burn duration / coast delay ให้</p><label>Stage timeline JSON<textarea id="timeline_stages" rows="8" spellcheck="false"></textarea></label><label>Fairing jettison T+ s<input id="fairing_t" type="number" min="0" placeholder="เว้นว่าง = ใช้ระดับความสูงด้านบน"></label></div>
+<div class="section-label">09 · ASCENT & NUMERICAL SETTINGS</div>
 <label class="check"><input id="auto_profile" type="checkbox" checked> Auto ascent profile (แนะนำเมื่อไม่ทราบ flight profile)</label>
 <div id="manual-profile" class="subpanel hidden"><div class="two"><label>Vertical time s<input id="vertical_time" type="number" min="0" max="30" value="10"></label><label>Pitch kick °<input id="kick_angle" type="number" min="0" max="20" step=".1" value="6"></label></div><label>Kick duration s<input id="kick_duration" type="number" min="1" max="40" value="12"></label></div>
 <div class="two"><label>Minimum elevation °<input id="min_elevation" type="number" min="0" max="30" step=".5" value="5"></label><label>Integration timestep<select id="timestep"><option value=".02">0.02 s</option><option value=".05" selected>0.05 s</option><option value=".1">0.10 s</option><option value=".2">0.20 s</option></select></label></div>
