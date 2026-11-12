@@ -320,6 +320,15 @@ def publish_version(version_id: str, authorization: str | None = Header(default=
                        body={"p_version_id": version_id})
 
 
+@router.patch("/admin/{child_table}/{row_id}")
+def update_version_child(child_table: str, row_id: str, payload: dict = Body(...),
+                         authorization: str | None = Header(default=None)):
+    client = _admin_client(authorization)
+    if child_table not in {"rocket_stages", "rocket_boosters", "rocket_sources"}:
+        raise HTTPException(status_code=404, detail="Unsupported revision data type.")
+    return _update(client, child_table, row_id, payload)
+
+
 @router.post("/admin/versions/{version_id}/{child_table}")
 def add_version_child(version_id: str, child_table: str, payload: dict = Body(...),
                       authorization: str | None = Header(default=None)):

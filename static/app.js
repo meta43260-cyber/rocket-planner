@@ -1,10 +1,4 @@
 const $=id=>document.getElementById(id);
-const presets={
- "gslv":{payload:2367,fairing_mass:1200,fairing_alt:115,site_lat:13.72,site_lon:80.23,site_alt:10,target_alt:170,target_apogee_alt:35786,target_inc:19.35,mission_type:"circular",vertical_time:10,kick_angle:3,kick_duration:12,use_boost:true,boost_groups:[{name:"S139 strap-on",count:4,thrust_sl:680,thrust_vac:762,isp_sl:250,isp_vac:262,prop_mass:42000,dry_mass:5600,burn_time:150,area:3.46,ignite_t:0,jettison_delay:2}],stages:[{name:"S139",thrust_sl:4000,thrust_vac:4700,isp_sl:240,isp_vac:269,prop_mass:139000,dry_mass:28000,burn_time:100,area:6.15},{name:"GS2",thrust_sl:750,thrust_vac:846,isp_sl:280,isp_vac:295,prop_mass:42000,dry_mass:5600,burn_time:143,area:6.15},{name:"CUS",thrust_sl:60,thrust_vac:73.6,isp_sl:450,isp_vac:454,prop_mass:12500,dry_mass:2500,burn_time:720,area:6.15}]},
- "falcon":{payload:15000,fairing_mass:1900,fairing_alt:110,site_lat:28.5619,site_lon:-80.5772,site_alt:10,target_alt:550,target_apogee_alt:550,target_inc:53,mission_type:"circular",vertical_time:10,kick_angle:6.5,kick_duration:14,use_boost:false,boost_groups:[],stages:[{name:"Stage 1",thrust_sl:7607,thrust_vac:8227,isp_sl:283,isp_vac:312,prop_mass:411000,dry_mass:25600,burn_time:162,area:10.52},{name:"Stage 2",thrust_sl:934,thrust_vac:934,isp_sl:348,isp_vac:348,prop_mass:107500,dry_mass:4000,burn_time:397,area:10.52,ignition_delay:5}]},
- "electron":{payload:200,fairing_mass:50,fairing_alt:80,site_lat:-39.2617,site_lon:177.8649,site_alt:20,target_alt:500,target_apogee_alt:500,target_inc:97.4,mission_type:"circular",vertical_time:8,kick_angle:7,kick_duration:12,use_boost:false,boost_groups:[],stages:[{name:"Stage 1",thrust_sl:162,thrust_vac:192,isp_sl:303,isp_vac:311,prop_mass:9250,dry_mass:950,burn_time:154,area:1.13},{name:"Stage 2",thrust_sl:25.8,thrust_vac:25.8,isp_sl:343,isp_vac:343,prop_mass:2050,dry_mass:250,burn_time:320,area:1.13}]},
- "custom":{payload:500,fairing_mass:120,fairing_alt:100,site_lat:12.5,site_lon:99.9,site_alt:5,target_alt:450,target_apogee_alt:450,target_inc:30,mission_type:"circular",vertical_time:10,kick_angle:6,kick_duration:15,use_boost:false,boost_groups:[],stages:[{name:"Stage 1",thrust_sl:500,thrust_vac:560,isp_sl:270,isp_vac:295,prop_mass:28000,dry_mass:2200,burn_time:150,area:3.5},{name:"Stage 2",thrust_sl:70,thrust_vac:70,isp_sl:330,isp_vac:330,prop_mass:6000,dry_mass:600,burn_time:300,area:3.5}]}
-};
 let lastResult=null,lastPayload=null,mapObj=null;
 function setVal(id,v){if(v!==undefined&&v!==null&&$(id))$(id).value=v}
 function stageTimeline(stages){let t=0;return stages.map(s=>{const ign=t+Number(s.ignition_delay||0),cut=ign+Number(s.burn_time),sep=cut+2;t=sep;return {ignition_t:ign,cutoff_t:cut,separation_t:sep}})}
@@ -22,16 +16,11 @@ function applyConfig(p){
  $("mission_type").value=p.mission_type||"circular";
  $("target_apogee_alt").disabled=$("mission_type").value==="circular";
 }
-function loadPreset(){const p=presets[$("preset").value];applyConfig(p)}
-$("preset").addEventListener("change",loadPreset);$("load-preset").addEventListener("click",loadPreset);loadPreset();
 $("mission_type").addEventListener("change",()=>{$("target_apogee_alt").disabled=$("mission_type").value==="circular"});
 $("use_boost").addEventListener("change",()=> $("boost-fields").classList.toggle("hidden",!$("use_boost").checked));
 $("use_timeline").addEventListener("change",()=>{$("timeline-fields").classList.toggle("hidden",!$("use_timeline").checked);if($("use_timeline").checked){try{$("timeline_stages").value=JSON.stringify(stageTimeline(JSON.parse($("stages").value)),null,2)}catch(e){}}});
 $("auto_profile").addEventListener("change",()=> $("manual-profile").classList.toggle("hidden",$("auto_profile").checked));
-function currentConfig(){return {stages:JSON.parse($("stages").value),payload:Number($("payload").value),fairing_mass:Number($("fairing_mass").value),fairing_alt:Number($("fairing_alt").value),site_lat:Number($("site_lat").value),site_lon:Number($("site_lon").value),site_alt:Number($("site_alt").value),target_alt:Number($("target_alt").value),target_apogee_alt:Number($("target_apogee_alt").value),target_inc:Number($("target_inc").value),mission_type:$("mission_type").value,vertical_time:Number($("vertical_time").value),kick_angle:Number($("kick_angle").value),kick_duration:Number($("kick_duration").value),use_boost:$("use_boost").checked,boost_groups:JSON.parse($("boost_groups").value||"[]"),boost_throttle:n("boost_throttle"),solo_throttle:n("solo_throttle"),boost_auto_burn:$("boost_auto_burn").checked,obs_lat:n("obs_lat"),obs_lon:n("obs_lon"),obs_alt:n("obs_alt"),min_elevation:n("min_elevation"),timestep:n("timestep"),orbit_count:n("orbit_count"),ascend_east:$("ascend_east").checked,auto_profile:$("auto_profile").checked}}
 function download(name,content,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)}
-$("save-preset").addEventListener("click",()=>{try{download("rocket-planner-preset.json",JSON.stringify(currentConfig(),null,2),"application/json")}catch(e){alert("Preset JSON ไม่ถูกต้อง: "+e.message)}});
-$("preset-file").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;try{const p=JSON.parse(await file.text());applyConfig(p);$("preset").value="custom"}catch(err){alert("เปิด preset ไม่สำเร็จ: "+err.message)}e.target.value=""});
 function n(id){return Number($(id).value)}
 function safe(v,d=2){return v===null||v===undefined||!Number.isFinite(Number(v))?"—":Number(v).toFixed(d)}
 function metric(label,value,sub=""){return `<div class="metric"><span>${label}</span><strong>${value}</strong><small>${sub}</small></div>`}
@@ -93,7 +82,7 @@ $("mission-form").addEventListener("submit",async ev=>{
 });
 
 
-// Published Supabase rocket catalog integration. Existing local presets remain available offline.
+// Published Supabase rocket catalog integration. Rocket selection is database-only.
 let databaseRockets = [];
 async function loadDatabaseRockets() {
   const select = $("database-rocket");
@@ -112,7 +101,7 @@ async function loadDatabaseRockets() {
       : "ยังไม่มีจรวดที่เผยแพร่ในฐานข้อมูล";
   } catch (error) {
     select.innerHTML = '<option value="">ฐานข้อมูลยังไม่พร้อมใช้งาน</option>';
-    $("database-status").textContent = error.message + " · ยังเลือก Preset ในเครื่องได้ตามปกติ";
+    $("database-status").textContent = error.message + "";
   }
 }
 function loadDatabaseRocket() {
@@ -124,6 +113,10 @@ function loadDatabaseRocket() {
   const version = rocket.current_version || {};
   const stages = version.stages || [];
   if (!stages.length) {
+    $("stages").value = "[]";
+    $("boost_groups").value = "[]";
+    $("use_boost").checked = false;
+    $("boost-fields").classList.add("hidden");
     $("database-status").textContent = "รายการนี้ยังไม่มี Stage data จึงยังนำไปจำลองไม่ได้";
     return;
   }
@@ -145,7 +138,6 @@ function loadDatabaseRocket() {
     site_alt: version.site_alt ?? n("site_alt"),
   };
   applyConfig(config);
-  $("preset").value = "custom";
   $("database-status").textContent = "โหลด " + (rocket.name || rocket.slug) +
     " · Revision " + (version.version || version.version_number || version.id || "current");
 }

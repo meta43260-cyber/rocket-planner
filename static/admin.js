@@ -31,6 +31,7 @@ function renderCatalog(data){
      '<div class="version-actions"><button type="button" data-rocket="'+esc(r.id)+'" data-version="'+esc(v.id)+'">เลือก Revision นี้เพื่อจัดการ</button><span>สถานะ: '+esc(v.status)+(v.is_current?' · Current':'')+'</span></div></section>'
    }).join(""):'<p class="muted">ยังไม่มี Revision</p>')+'</article>'
  }).join("");
+ refreshDbSelects();
  root.querySelectorAll("[data-version]").forEach(btn=>btn.addEventListener("click",()=>{
   $("rocket-id").value=btn.dataset.rocket;$("version-id").value=btn.dataset.version;
   status("เลือก Rocket และ Revision แล้ว");$("version-id").scrollIntoView({behavior:"smooth",block:"center"})
@@ -50,4 +51,98 @@ $("create-rocket").onclick=async()=>{try{const d=await api("/admin/rockets","POS
 $("create-version").onclick=async()=>{try{const id=$("rocket-id").value.trim();if(!id)throw Error("กรุณาระบุ Rocket ID");const d=await api("/admin/rockets/"+encodeURIComponent(id)+"/versions","POST",parse("version-json"));$("version-id").value=d.id||"";status({draft_created:d});await load()}catch(e){status(e.message)}};
 $("add-child").onclick=async()=>{try{const id=$("version-id").value.trim();if(!id)throw Error("กรุณาระบุ Version ID");const d=await api("/admin/versions/"+encodeURIComponent(id)+"/"+$("child-table").value,"POST",parse("child-json"));status({inserted:d});await load()}catch(e){status(e.message)}};
 $("publish").onclick=async()=>{try{const id=$("version-id").value.trim();if(!id)throw Error("กรุณาระบุ Version ID");if(!confirm("ยืนยันเผยแพร่ Revision นี้?"))return;const d=await api("/admin/versions/"+encodeURIComponent(id)+"/publish","POST");status({published:d});await load()}catch(e){status(e.message)}};
+
+const dbFields={
+ rocket_stages:[["stage_number","ลำดับ Stage","number"],["name","ชื่อ Stage","text"],["thrust_sl_kn","Thrust sea level (kN)","number"],["thrust_vac_kn","Thrust vacuum (kN)","number"],["isp_sl_s","ISP sea level (s)","number"],["isp_vac_s","ISP vacuum (s)","number"],["prop_mass_kg","Propellant (kg)","number"],["dry_mass_kg","Dry mass (kg)","number"],["burn_time_s","Burn time (s)","number"],["reference_area_m2","Reference area (m²)","number"],["ignition_delay_s","Ignition delay (s)","number"]],
+ rocket_boosters:[["name","ชื่อ Booster","text"],["quantity","จำนวน","number"],["thrust_sl_kn","Thrust sea level (kN)","number"],["thrust_vac_kn","Thrust vacuum (kN)","number"],["isp_sl_s","ISP sea level (s)","number"],["isp_vac_s","ISP vacuum (s)","number"],["prop_mass_kg","Propellant (kg)","number"],["dry_mass_kg","Dry mass (kg)","number"],["burn_time_s","Burn time (s)","number"],["reference_area_m2","Reference area (m²)","number"],["ignite_t_s","Ignition time (s)","number"],["jettison_delay_s","Jettison delay (s)","number"]],
+ rocket_sources:[["title","ชื่อแหล่งข้อมูล","text"],["publisher","Publisher","text"],["source_type","ประเภทแหล่งข้อมูล","text"],["source_url","URL","url"],["confidence","ความเชื่อมั่น (A-D)","text"],["accessed_at","วันที่เข้าถึง","date"],["notes","หมายเหตุ","text"]]
+};
+function dbVal(id){return $(id).value.trim()}
+function dbNum(id){const v=dbVal(id);return v===""?null:Number(v)}
+function fillDbChildFields(row={}){
+ const kind=$("db-child-type").value;
+ $("db-child-fields").innerHTML=dbFields[kind].map(([key,label,type])=>'<label>'+esc(label)+'<input data-db-field="'+key+'" type="'+type+'" value="'+esc(row[key]??"")+'" '+(key==="source_url"?'placeholder="https://..."':"")+'></label>').join("");
+}
+function fillDbChildSelect(){
+ const kind=$("db-child-type").value,vid=$("db-child-version").value;
+ const rows=(catalogData?.[{rocket_stages:"stages",rocket_boosters:"boosters",rocket_sources:"sources"}[kind]]||[]).filter(x=>x.version_id===vid);
+ $("db-child-select").innerHTML='<option value="">＋ เพิ่มรายการใหม่</option>'+rows.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name||x.title||("รายการ "+(x.stage_number??"")))+'</option>').join("");
+ fillDbChildFields();
+}
+function fillDbVersionSelect(){
+ const rid=$("db-version-rocket").value;
+ const allVs=(catalogData?.versions||[]).filter(v=>v.rocket_id===rid);
+ const vs=allVs.filter(v=>v.status==="draft");
+ $("db-version-select").innerHTML='<option value="">＋ สร้าง Draft ใหม่</option>'+vs.map(v=>'<option value="'+esc(v.id)+'">Revision '+esc(v.revision)+' · '+esc(v.status)+'</option>').join("");
+ const next=Math.max(0,...allVs.map(v=>Number(v.revision)||0))+1;
+ $("db-revision").value=next;
+ fillDbVersionForm();
+ $("db-child-version").innerHTML=vs.map(v=>'<option value="'+esc(v.id)+'">Revision '+esc(v.revision)+' · '+esc(v.status)+'</option>').join("");
+ fillDbChildSelect();
+}
+function fillDbVersionForm(){
+ const v=(catalogData?.versions||[]).find(x=>x.id===$("db-version-select").value);
+ $("db-revision").value=v?.revision??Math.max(1,...(catalogData?.versions||[]).filter(x=>x.rocket_id===$("db-version-rocket").value).map(x=>Number(x.revision)+1));
+ $("db-confidence").value=v?.confidence||"D";
+ $("db-payload").value=v?.payload_mass_kg??"";
+ $("db-capacity").value=v?.payload_capacity_leo_kg??"";
+ $("db-fairing").value=v?.fairing_mass_kg??"";
+ $("db-jettison").value=v?.fairing_jettison_alt_km??"";
+ $("db-version-notes").value=v?.notes||"";
+}
+function refreshDbSelects(){
+ if(!catalogData)return;
+ const rockets=catalogData.rockets||[];
+ const opts='<option value="">＋ สร้างจรวดใหม่</option>'+rockets.map(r=>'<option value="'+esc(r.id)+'">'+esc(r.name)+'</option>').join("");
+ $("db-rocket-select").innerHTML=opts;
+ $("db-version-rocket").innerHTML=rockets.map(r=>'<option value="'+esc(r.id)+'">'+esc(r.name)+'</option>').join("");
+ if(!rockets.length){$("db-version-rocket").innerHTML='<option value="">ยังไม่มีจรวด</option>'}
+ fillDbVersionSelect();
+}
+$("db-rocket-select").onchange=()=>{
+ const r=(catalogData?.rockets||[]).find(x=>x.id===$("db-rocket-select").value);
+ $("db-rocket-name").value=r?.name||"";$("db-rocket-slug").value=r?.slug||"";
+ $("db-rocket-maker").value=r?.manufacturer||"";$("db-rocket-country").value=r?.country||"";
+ $("db-rocket-type").value=r?.vehicle_type||"orbital";
+};
+$("db-version-rocket").onchange=fillDbVersionSelect;
+$("db-version-select").onchange=fillDbVersionForm;
+$("db-child-version").onchange=fillDbChildSelect;
+$("db-child-type").onchange=fillDbChildSelect;
+$("db-child-select").onchange=()=>{
+ const kind=$("db-child-type").value,id=$("db-child-select").value;
+ const key={rocket_stages:"stages",rocket_boosters:"boosters",rocket_sources:"sources"}[kind];
+ const row=(catalogData?.[key]||[]).find(x=>x.id===id);
+ fillDbChildFields(row||{});
+};
+$("db-save-rocket").onclick=async()=>{
+ try{
+  const id=dbVal("db-rocket-select"),payload={name:dbVal("db-rocket-name"),slug:dbVal("db-rocket-slug"),manufacturer:dbVal("db-rocket-maker")||null,country:dbVal("db-rocket-country")||null,vehicle_type:dbVal("db-rocket-type")};
+  if(!payload.name||!payload.slug)throw Error("กรอกชื่อจรวดและ Slug ก่อน");
+  const saved=id?await api("/admin/rockets/"+encodeURIComponent(id),"PATCH",payload):await api("/admin/rockets","POST",payload);
+  status(id?"แก้ไขข้อมูลจรวดแล้ว":"เพิ่มจรวดแล้ว");await load();$("db-rocket-select").value=saved.id;$("db-rocket-select").dispatchEvent(new Event("change"));
+ }catch(e){status(e.message)}
+};
+$("db-save-version").onclick=async()=>{
+ try{
+  const rid=dbVal("db-version-rocket"),id=dbVal("db-version-select");
+  if(!rid)throw Error("เลือกจรวดก่อน");
+  const payload={revision:dbNum("db-revision"),confidence:dbVal("db-confidence"),payload_mass_kg:dbNum("db-payload"),payload_capacity_leo_kg:dbNum("db-capacity"),fairing_mass_kg:dbNum("db-fairing"),fairing_jettison_alt_km:dbNum("db-jettison"),notes:dbVal("db-version-notes")||null};
+  Object.keys(payload).forEach(k=>{if(payload[k]===null)delete payload[k]});
+  const saved=id?await api("/admin/versions/"+encodeURIComponent(id),"PATCH",payload):await api("/admin/rockets/"+encodeURIComponent(rid)+"/versions","POST",payload);
+  status(id?"แก้ไข Revision แล้ว":"สร้าง Draft Revision แล้ว");await load();$("db-version-rocket").value=rid;fillDbVersionSelect();$("db-version-select").value=saved.id;fillDbVersionForm();
+ }catch(e){status(e.message)}
+};
+$("db-save-child").onclick=async()=>{
+ try{
+  const vid=dbVal("db-child-version"),kind=$("db-child-type").value,id=dbVal("db-child-select");
+  if(!vid)throw Error("เลือก Revision ก่อน");
+  const payload={};$("db-child-fields").querySelectorAll("[data-db-field]").forEach(el=>{const v=el.value.trim();if(v!=="")payload[el.dataset.dbField]=el.type==="number"?Number(v):v});
+  if(kind==="rocket_stages"&&!payload.stage_number)throw Error("กรอกลำดับ Stage");
+  if(kind==="rocket_sources"&&!payload.title)throw Error("กรอกชื่อแหล่งข้อมูล");
+  const saved=id?await api("/admin/"+kind+"/"+encodeURIComponent(id),"PATCH",payload):await api("/admin/versions/"+encodeURIComponent(vid)+"/"+kind,"POST",payload);
+  status(id?"แก้ไขข้อมูลแล้ว":"เพิ่มข้อมูลแล้ว");await load();$("db-child-version").value=vid;fillDbChildSelect();if(saved.id)$("db-child-select").value=saved.id;$("db-child-select").dispatchEvent(new Event("change"));
+ }catch(e){status(e.message)}
+};
+
 show();if(token)load().catch(e=>{status(e.message);token="";sessionStorage.removeItem("rp_admin_token");show()});

@@ -9,6 +9,10 @@
 .pill{border:1px solid #426078;border-radius:20px;padding:4px 9px;font-size:11px;color:#c7d8e8}.pill.draft{border-color:#8b7041;color:#f0ce8d}
 .metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
 .metric-grid>div{background:#0b1725;border-radius:7px;padding:9px;min-width:0}.metric-grid small{display:block;color:#9eb1c4;font-size:11px}.metric-grid b{display:block;font-size:13px;overflow-wrap:anywhere}
+#quick-db-editor label{display:block;color:#b6c7d8;font-size:12px;margin:8px 0}
+#quick-db-editor input,#quick-db-editor select,#quick-db-editor textarea{width:100%;display:block;margin-top:5px;background:#091523;color:#e8f0f8;border:1px solid #30445b;border-radius:6px;padding:9px;font:13px system-ui}
+#quick-db-editor button{background:#52d6d0;color:#071720;border:0;border-radius:6px;padding:10px 14px;margin-top:8px;font-weight:600}
+#quick-db-editor h3{font-size:15px;margin:4px 0 10px}
 .version-entry h4{margin:15px 0 7px;font-size:13px;color:#c7d8e8}
 .table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}th,td{text-align:left;padding:8px;border-bottom:1px solid #293b50}th{color:#9fb6ca}
 .source-list{padding-left:20px;font-size:13px}.source-list li{margin:8px 0}.source-list a{color:#66d8d0}.source-list p{color:#9fb2c4;margin:3px 0}
@@ -22,6 +26,26 @@
 <div class="admin-actions"><button class="primary" id="login">เข้าสู่ระบบ</button></div></section>
 <section id="workspace" class="hidden">
 <div class="admin-card"><div class="admin-actions"><h2 id="who" style="margin-right:auto">Admin</h2><button id="refresh">โหลดข้อมูลใหม่</button><button id="inspect-schema">ตรวจ Schema</button><button id="logout">ออกจากระบบ</button></div><div id="status" class="admin-status">เชื่อมต่อแล้ว</div></div>
+<section class="admin-card" id="quick-db-editor">
+<h2>จัดการฐานข้อมูลแบบฟอร์ม</h2><p class="hint">เพิ่มและแก้ไขข้อมูลโดยไม่ต้องเขียน JSON · บันทึกลง Supabase โดยตรง</p>
+<div class="admin-grid">
+<section class="version-entry"><h3>จรวด</h3>
+<label>เลือกจรวด<select id="db-rocket-select"><option value="">＋ สร้างจรวดใหม่</option></select></label>
+<label>ชื่อจรวด<input id="db-rocket-name"></label><label>Slug<input id="db-rocket-slug"></label>
+<label>ผู้ผลิต<input id="db-rocket-maker"></label><label>ประเทศ<input id="db-rocket-country"></label>
+<label>ประเภท<select id="db-rocket-type"><option value="orbital">Orbital</option><option value="suborbital">Suborbital</option><option value="sounding">Sounding</option><option value="other">Other</option></select></label>
+<button class="primary" id="db-save-rocket">บันทึกจรวด</button></section>
+<section class="version-entry"><h3>รุ่น / Revision</h3>
+<label>จรวด<select id="db-version-rocket"></select></label><label>Revision<select id="db-version-select"><option value="">＋ สร้าง Draft ใหม่</option></select></label>
+<div class="admin-grid">
+<label>เลข Revision<input id="db-revision" type="number" min="1"></label><label>Confidence<select id="db-confidence"><option>A</option><option>B</option><option>C</option><option selected>D</option></select></label>
+<label>Payload mass (kg)<input id="db-payload" type="number" min="0" step="any"></label><label>LEO capacity (kg)<input id="db-capacity" type="number" min="0" step="any"></label>
+<label>Fairing mass (kg)<input id="db-fairing" type="number" min="0" step="any"></label><label>Fairing jettison (km)<input id="db-jettison" type="number" min="0" step="any"></label></div>
+<label>หมายเหตุ<textarea id="db-version-notes" rows="3"></textarea></label><button class="primary" id="db-save-version">บันทึก Revision</button></section></div>
+<section class="version-entry"><h3>Stage / Booster / Source</h3><div class="admin-grid">
+<label>Revision<select id="db-child-version"></select></label><label>ประเภท<select id="db-child-type"><option value="rocket_stages">Stage</option><option value="rocket_boosters">Booster</option><option value="rocket_sources">Source</option></select></label></div>
+<label>เลือกรายการเพื่อแก้ไข (ไม่เลือก = เพิ่มใหม่)<select id="db-child-select"><option value="">＋ เพิ่มรายการใหม่</option></select></label>
+<div id="db-child-fields" class="admin-grid"></div><button class="primary" id="db-save-child">บันทึกรายการ</button></section></section>
 <div class="admin-grid">
 <section class="admin-card"><h2>1 · เพิ่มจรวด</h2><p class="hint">กรอก JSON ตามคอลัมน์จริงของตาราง rockets</p><textarea id="rocket-json">{
   "name": "Rocket name",

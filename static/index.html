@@ -16,10 +16,8 @@
 <div class="workspace" id="setup">
 <aside class="panel controls"><div class="panel-head"><div><span class="eyebrow">MISSION CONFIGURATION</span><h2>ตั้งค่าภารกิจ</h2></div><span class="step">01 / INPUT</span></div>
 <form id="mission-form">
-<div class="section-label">01 · VEHICLE PRESET</div>
-<label>จรวดต้นแบบ<select id="preset"><option value="gslv">GSLV Mk II (GTO-ish)</option><option value="falcon">Falcon 9 (LEO)</option><option value="electron">Electron (SSO)</option><option value="custom">Small launcher (custom)</option></select></label>
-<label>Rocket Database · Published<select id="database-rocket"><option value="">กำลังโหลดฐานข้อมูล...</option></select></label><p class="hint" id="database-status">โหลดข้อมูลจรวดที่เผยแพร่จาก Supabase</p>
-<div class="toolbar"><button type="button" class="soft-button" id="load-preset">↻ Reset preset</button><button type="button" class="soft-button" id="save-preset">↓ Export preset</button><label class="soft-button file-button">↑ Import preset<input type="file" id="preset-file" accept=".json,application/json" hidden></label></div>
+<div class="section-label">01 · ROCKET DATABASE</div>
+<label>เลือกจรวดจากฐานข้อมูล<select id="database-rocket"><option value="">กำลังโหลดฐานข้อมูล...</option></select></label><p class="hint" id="database-status">เลือกจรวดที่เผยแพร่แล้วจาก Supabase เพื่อโหลดข้อมูลเข้าสู่แบบจำลอง</p>
 <div class="section-label">02 · LAUNCH SITE</div><div class="two">
 <label>ละติจูด °<input id="site_lat" type="number" step=".0001" value="13.72" required></label><label>ลองจิจูด °<input id="site_lon" type="number" step=".0001" value="80.23" required></label></div>
 <label>ความสูงฐานปล่อย (m)<input id="site_alt" type="number" step="1" value="10"></label>
