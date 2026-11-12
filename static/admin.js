@@ -64,7 +64,7 @@ function dbVal(id){return $(id).value.trim()}
 function dbNum(id){const v=dbVal(id);return v===""?null:Number(v)}
 function fillDbChildFields(row={}){
  const kind=$("db-child-type").value;
- $("db-child-fields").innerHTML=((kind==="rocket_stages"?'<p class="note" style="grid-column:1/-1">Stage 1 ต้องกรอกทั้ง Thrust SL และ ISP SL เพราะใช้คำนวณ TWR เริ่มต้น ส่วน Stage บนสามารถเว้นทั้งสองช่องได้เมื่อจุดเครื่องในสภาวะใกล้สุญญากาศ</p>':kind==="rocket_boosters"?'<p class="note" style="grid-column:1/-1">Booster: ถ้าไม่มีข้อมูล Thrust SL และ ISP SL ที่ยืนยันได้ ให้เว้นว่างทั้งคู่ได้ ระบบจะใช้ค่า Vacuum แทนเป็นค่าประมาณและแสดงคำเตือนในผลจำลอง (อาจประเมินแรงขับช่วงใกล้พื้นโลกสูงเกินจริง) ห้ามใส่ค่าคาดเดาเป็นข้อมูลจริง</p>':""))+dbFields[kind].map(([key,label,type])=>type==="json"?'<label style="grid-column:1/-1">'+esc(label)+'<textarea data-db-field="'+key+'" rows="5" placeholder="[[0,4775],[20,4500],[60,3900]]">'+esc(row[key]?JSON.stringify(row[key]):"")+'</textarea></label>':'<label>'+esc(label)+'<input data-db-field="'+key+'" type="'+type+'" value="'+esc(row[key]??"")+'" '+(key==="source_url"?'placeholder="https://..."':((kind==="rocket_stages"||kind==="rocket_boosters")&&(key==="thrust_sl_kn"||key==="isp_sl_s")?'placeholder="เว้นว่างได้"':""))+'></label>').join("");
+ $("db-child-fields").innerHTML=((kind==="rocket_stages"?'<p class="note" style="grid-column:1/-1">Stage 1 ต้องมี Thrust SL เพื่อคำนวณ TWR ตอนเริ่มบิน ส่วน ISP SL เว้นได้แต่จะใช้ ISP vacuum เป็นค่าประมาณในบรรยากาศ; Thrust-Time Curve ใช้ JSON [[เวลาเผาไหม้สะสม (s), Thrust vacuum (kN)], ...]</p>':kind==="rocket_boosters"?'<p class="note" style="grid-column:1/-1">Booster: ถ้าไม่มีข้อมูล Thrust SL และ ISP SL ที่ยืนยันได้ ให้เว้นว่างทั้งคู่ได้ ระบบจะใช้ค่า Vacuum แทนเป็นค่าประมาณและแสดงคำเตือนในผลจำลอง (อาจประเมินแรงขับช่วงใกล้พื้นโลกสูงเกินจริง) ห้ามใส่ค่าคาดเดาเป็นข้อมูลจริง</p>':""))+dbFields[kind].map(([key,label,type])=>type==="json"?'<label style="grid-column:1/-1">'+esc(label)+'<textarea data-db-field="'+key+'" rows="5" placeholder="[[0,4775],[20,4500],[60,3900]]">'+esc(row[key]?JSON.stringify(row[key]):"")+'</textarea></label>':'<label>'+esc(label)+'<input data-db-field="'+key+'" type="'+type+'" value="'+esc(row[key]??"")+'" '+(key==="source_url"?'placeholder="https://..."':((kind==="rocket_stages"||kind==="rocket_boosters")&&(key==="thrust_sl_kn"||key==="isp_sl_s")?'placeholder="เว้นว่างได้"':""))+'></label>').join("");
 }
 function fillDbChildSelect(){
  const kind=$("db-child-type").value,vid=$("db-child-version").value;
@@ -146,8 +146,7 @@ $("db-save-child").addEventListener("click",async()=>{
    for(const key of ["thrust_sl_kn","isp_sl_s"])if(!(key in payload))payload[key]=null;
    if(!payload.stage_number)throw Error("กรอกลำดับ Stage");
    const a=payload.thrust_sl_kn!==null,b=payload.isp_sl_s!==null;
-   if(Number(payload.stage_number)===1&&(!a||!b))throw Error("Stage 1 ต้องกรอกทั้ง Thrust SL และ ISP SL");
-   if(a!==b)throw Error("กรอกทั้ง Thrust SL และ ISP SL หรือเว้นว่างทั้งคู่");
+   if(Number(payload.stage_number)===1&&!a)throw Error("Stage 1 ต้องมี Thrust SL เพื่อคำนวณ TWR ตอนเริ่มบิน");
   }
   if(kind==="rocket_boosters"){
    for(const key of ["thrust_sl_kn","isp_sl_s"])if(!(key in payload))payload[key]=null;
