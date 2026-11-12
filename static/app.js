@@ -45,7 +45,7 @@ function render(data,p){
  metric("VISIBLE DURATION",safe(s.visible_duration_s,0)+" s")+
  metric("ROCKET SUNLIT",safe(s.sunlit_percent,0)+"%")+
  metric("PHOTO WINDOW",safe(s.photo_window_percent,0)+"%");
- const warn=[];if(p.mission_type==="escape"&&e.e<1)warn.push("พลังงานยังไม่พอหลุดพ้นโลก (e < 1)");if(e.e>=1)warn.push("Escape trajectory: orbital eccentricity ≥ 1");if(data.boost_warnings?.length)warn.push(...data.boost_warnings);if(s.visible_count===0)warn.push("ไม่พบช่วงที่จรวดสูงกว่ามุมเงยขั้นต่ำจากตำแหน่งผู้ชม");$("warnings").innerHTML=warn.length?'<div class="notice">'+warn.map(x=>"⚠ "+x).join("<br>")+"</div>":"";
+ const warn=[...(data.model_warnings||[])];if(p.mission_type==="escape"&&e.e<1)warn.push("พลังงานยังไม่พอหลุดพ้นโลก (e < 1)");if(e.e>=1)warn.push("Escape trajectory: orbital eccentricity ≥ 1");if(data.boost_warnings?.length)warn.push(...data.boost_warnings);if(s.visible_count===0)warn.push("ไม่พบช่วงที่จรวดสูงกว่ามุมเงยขั้นต่ำจากตำแหน่งผู้ชม");$("warnings").innerHTML=warn.length?'<div class="notice">'+warn.map(x=>"⚠ "+x).join("<br>")+"</div>":"";
  drawMap(data,p);
  tableRows("events-table tbody",data.events||[],[r=>r.event,r=>safe(r.t,1),r=>safe(r.alt_km,1),r=>safe(r.velocity_mps,0)]);
  const bp=$("boost-panel");if(data.boost_log?.length){bp.classList.remove("hidden");tableRows("boost-table tbody",data.boost_log,[r=>safe(r.t0,1)+"–"+safe(r.t1,1),r=>r.name,r=>safe(r.F_sl,0)+" kN",r=>safe(r.isp_vac,1),r=>safe(r.prop/1000,2)+" t",r=>safe(r.jett/1000,2)+" t"])}else bp.classList.add("hidden");
@@ -122,6 +122,7 @@ function loadDatabaseRocket() {
     burn_time: stage.burn_time_s,
     area: stage.reference_area_m2,
     ignition_delay: stage.ignition_delay_s ?? 0,
+    thrust_curve: stage.thrust_curve_json ?? null,
   }));
   if (!stages.length) {
     $("stages").value = "[]";
