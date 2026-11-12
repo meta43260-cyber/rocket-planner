@@ -32,8 +32,16 @@ function renderCatalog(data){
  }).join("");
  refreshDbSelects();
  root.querySelectorAll("[data-version]").forEach(btn=>btn.addEventListener("click",()=>{
-  $("rocket-id").value=btn.dataset.rocket;$("version-id").value=btn.dataset.version;
-  status("เลือก Rocket และ Revision แล้ว");$("version-id").scrollIntoView({behavior:"smooth",block:"center"})
+  const rocketId=btn.dataset.rocket,versionId=btn.dataset.version;
+  $("db-rocket-select").value=rocketId;$("db-rocket-select").dispatchEvent(new Event("change"));
+  $("db-version-rocket").value=rocketId;fillDbVersionSelect();
+  const version=(catalogData?.versions||[]).find(v=>v.id===versionId);
+  if(version?.status==="draft"){
+   $("db-version-select").value=versionId;fillDbVersionForm();
+   $("db-child-version").value=versionId;fillDbChildSelect();
+  }
+  $("quick-db-editor").scrollIntoView({behavior:"smooth",block:"start"});
+  status(version?.status==="draft"?"เลือก Draft เพื่อแก้ไขแล้ว":"Revision ที่เผยแพร่แล้วอ่านได้อย่างเดียว · สร้าง Draft ใหม่เพื่อแก้ไข");
  }));
 }
 async function load(){
