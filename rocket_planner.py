@@ -81,9 +81,9 @@ def drag_coefficient(mach: float) -> float:
 @dataclass
 class Stage:
     name: str
-    thrust_sl: float
+    thrust_sl: Optional[float]
     thrust_vac: float
-    isp_sl: float
+    isp_sl: Optional[float]
     isp_vac: float
     prop_mass: float
     dry_mass: float
@@ -92,10 +92,16 @@ class Stage:
     ignition_delay: float = 0.0
 
     def thrust(self, p: float) -> float:
+        # With no sea-level datum, model this upper stage at its vacuum rating.
+        # This is appropriate only when the stage ignites in near-vacuum.
+        if self.thrust_sl is None:
+            return self.thrust_vac
         f = min(max(p / P0, 0.0), 1.0)
         return self.thrust_vac + (self.thrust_sl - self.thrust_vac) * f
 
     def isp(self, p: float) -> float:
+        if self.isp_sl is None:
+            return self.isp_vac
         f = min(max(p / P0, 0.0), 1.0)
         return self.isp_vac + (self.isp_sl - self.isp_vac) * f
 
@@ -208,6 +214,8 @@ def launch_azimuth(site_lat_deg, inc_deg, target_alt, ascend_east=True):
 # ============================================================
 def auto_ascent_profile(vehicle: Vehicle, mission: Mission) -> Tuple[float, float, float]:
     m0 = max(vehicle.gross_mass(), 1.0)
+    if vehicle.stages[0].thrust_sl is None:
+        raise ValueError("Stage 1 requires sea-level thrust for the initial TWR estimate.")
     F0 = max(vehicle.stages[0].thrust_sl, 1.0)
     twr0 = float(np.clip(F0 / (m0 * G0), 1.05, 3.0))
     excess = twr0 - 1.0
