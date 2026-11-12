@@ -57,6 +57,7 @@ class BoosterInput(BaseModel):
     area: float = Field(gt=0)
     ignite_t: float = Field(default=0, ge=0, le=100000)
     jettison_delay: float = Field(default=2, ge=0, le=300)
+    thrust_curve: list[tuple[float, float]] | None = Field(default=None, max_length=200)
 
 
 class TimelineBurn(BaseModel):
@@ -243,13 +244,6 @@ def simulate(data: SimulationInput):
         raise HTTPException(422, "mission_type must be circular, elliptical or escape")
     if data.use_boost and not data.boost_groups:
         raise HTTPException(422, "Add at least one booster group or disable Side Booster.")
-    if data.use_boost:
-        for i, booster in enumerate(data.boost_groups, start=1):
-            if (booster.thrust_sl is None) != (booster.isp_sl is None):
-                raise HTTPException(
-                    422,
-                    f"Booster {i}: enter both sea-level thrust and ISP, or leave both blank."
-                )
     # Liftoff TWR needs a sea-level thrust datum. ISP SL may be omitted,
     # but vacuum ISP is then used as an explicit approximation.
     if data.stages[0].thrust_sl is None:
@@ -300,7 +294,7 @@ def simulate(data: SimulationInput):
             core = stages_cfg[0]
             groups = [bst.make_group(g.name, g.count, g.thrust_sl, g.thrust_vac,
                       g.isp_sl, g.isp_vac, g.prop_mass, g.dry_mass, g.burn_time,
-                      g.area, g.ignite_t, g.jettison_delay) for g in data.boost_groups]
+                      g.area, g.ignite_t, g.jettison_delay, g.thrust_curve) for g in data.boost_groups]
             phases, boost_log = bst.build_boost_phases(
                 core, groups, data.boost_throttle, data.solo_throttle, data.boost_auto_burn)
             boost_warnings = bst.validate(core, groups, phases)
