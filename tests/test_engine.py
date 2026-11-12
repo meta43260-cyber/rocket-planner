@@ -50,3 +50,30 @@ def test_launch_azimuth_uses_entered_compass_heading():
 
     wrapped_azimuth, _, _ = rp.launch_azimuth(13.72, 360.0, 170_000.0)
     assert wrapped_azimuth == 0.0
+
+
+
+def test_timeline_supports_restart_after_coast_without_resetting_propellant():
+    stage = rp.Stage(
+        "Restartable upper stage", 100_000.0, 100_000.0, 300.0, 300.0,
+        1000.0, 200.0, 4.0, 1.0,
+        burn_windows=[(0.0, 2.0), (4.0, 6.0)],
+        separation_t=8.0,
+    )
+    vehicle = rp.Vehicle(
+        stages=[stage], payload=100.0, payload_deploy_t=8.0
+    )
+    mission = rp.Mission(
+        site_lat=0.0, site_lon=0.0, site_alt=0.0,
+        target_alt=200_000.0, auto_profile=False,
+        vertical_time=0.0, kick_angle=0.0, kick_duration=1.0,
+    )
+    ascent, state, t_end, _, _ = rp.simulate_ascent(
+        vehicle, mission, dt=0.05, dt_out=0.1, max_time=10.0, verbose=False
+    )
+    at_coast = ascent[(ascent["t"] >= 2.5) & (ascent["t"] < 3.5)]
+    after_restart = ascent[(ascent["t"] >= 4.5) & (ascent["t"] < 5.5)]
+    assert not at_coast.empty and (at_coast["thrust_kN"] == 0).all()
+    assert not after_restart.empty and (after_restart["thrust_kN"] > 0).all()
+    assert after_restart["mass"].iloc[-1] < at_coast["mass"].iloc[0]
+    assert t_end >= 7.9
