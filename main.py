@@ -43,9 +43,11 @@ class StageInput(BaseModel):
 class BoosterInput(BaseModel):
     name: str = "SRB"
     count: int = Field(default=2, ge=1, le=12)
-    thrust_sl: float = Field(gt=0)
+    # Optional for solid boosters when manufacturer sea-level data is unpublished.
+    # If omitted, booster.py uses vacuum values as an explicit approximation and warns.
+    thrust_sl: float | None = Field(default=None, gt=0)
     thrust_vac: float = Field(gt=0)
-    isp_sl: float = Field(gt=0)
+    isp_sl: float | None = Field(default=None, gt=0)
     isp_vac: float = Field(gt=0)
     prop_mass: float = Field(gt=0)
     dry_mass: float = Field(ge=0)
@@ -198,6 +200,13 @@ def simulate(data: SimulationInput):
         raise HTTPException(422, "mission_type must be circular, elliptical or escape")
     if data.use_boost and not data.boost_groups:
         raise HTTPException(422, "Add at least one booster group or disable Side Booster.")
+    if data.use_boost:
+        for i, booster in enumerate(data.boost_groups, start=1):
+            if (booster.thrust_sl is None) != (booster.isp_sl is None):
+                raise HTTPException(
+                    422,
+                    f"Booster {i}: enter both sea-level thrust and ISP, or leave both blank."
+                )
     # Stage 1 starts at the launch site and therefore needs both sea-level values
     # for the initial TWR estimate. Upper stages may omit both only when they
     # ignite in near-vacuum; supplying just one is an inconsistent engine model.
