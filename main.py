@@ -28,16 +28,18 @@ app.include_router(supabase_api.router)
 
 class StageInput(BaseModel):
     name: str = "Stage"
-    # Sea-level values are optional only for upper stages that ignite in near-vacuum.
+    # Stage 1 needs sea-level thrust for liftoff TWR; missing ISP SL is explicitly approximated.
     thrust_sl: float | None = Field(default=None, gt=0, description="Sea-level thrust, kN; required for Stage 1")
     thrust_vac: float = Field(gt=0, description="Vacuum thrust, kN")
-    isp_sl: float | None = Field(default=None, gt=0, description="Sea-level ISP; required for Stage 1")
+    isp_sl: float | None = Field(default=None, gt=0, description="Sea-level ISP; optional, vacuum ISP fallback is warned")
     isp_vac: float = Field(gt=0)
     prop_mass: float = Field(gt=0, description="Propellant mass, kg")
     dry_mass: float = Field(ge=0, description="Dry mass, kg")
     burn_time: float = Field(gt=0, le=10000)
     area: float = Field(gt=0)
     ignition_delay: float = Field(default=0, ge=0, le=100000)
+    # Vacuum thrust curve: [[powered_time_s, thrust_kN], ...]
+    thrust_curve: list[tuple[float, float]] | None = Field(default=None, max_length=200)
 
 
 class BoosterInput(BaseModel):
@@ -55,6 +57,7 @@ class BoosterInput(BaseModel):
     area: float = Field(gt=0)
     ignite_t: float = Field(default=0, ge=0, le=100000)
     jettison_delay: float = Field(default=2, ge=0, le=300)
+    thrust_curve: list[tuple[float, float]] | None = Field(default=None, max_length=200)
 
 
 class TimelineBurn(BaseModel):
@@ -241,21 +244,26 @@ def simulate(data: SimulationInput):
         raise HTTPException(422, "mission_type must be circular, elliptical or escape")
     if data.use_boost and not data.boost_groups:
         raise HTTPException(422, "Add at least one booster group or disable Side Booster.")
+    # Liftoff TWR needs a sea-level thrust datum. ISP SL may be omitted,
+    # but vacuum ISP is then used as an explicit approximation.
+    if data.stages[0].thrust_sl is None:
+        raise HTTPException(422, "Stage 1 requires sea-level thrust for liftoff TWR.")
+    for i, stage in enumerate(data.stages, start=1):
+        if stage.thrust_curve:
+            points = stage.thrust_curve
+            if len(points) < 2 or points[0][0] != 0:
+                raise HTTPException(422, f"Stage {i}: thrust_curve needs at least two points and must start at 0 seconds.")
+            if any(t < 0 or thrust <= 0 for t, thrust in points):
+                raise HTTPException(422, f"Stage {i}: thrust_curve values must be positive and times non-negative.")
+            if any(points[j][0] >= points[j + 1][0] for j in range(len(points) - 1)):
+                raise HTTPException(422, f"Stage {i}: thrust_curve times must be strictly increasing.")
     if data.use_boost:
         for i, booster in enumerate(data.boost_groups, start=1):
-            if (booster.thrust_sl is None) != (booster.isp_sl is None):
-                raise HTTPException(
-                    422,
-                    f"Booster {i}: enter both sea-level thrust and ISP, or leave both blank."
-                )
-    # Stage 1 starts at the launch site and therefore needs both sea-level values
-    # for the initial TWR estimate. Upper stages may omit both only when they
-    # ignite in near-vacuum; supplying just one is an inconsistent engine model.
-    if data.stages[0].thrust_sl is None or data.stages[0].isp_sl is None:
-        raise HTTPException(422, "Stage 1 requires both sea-level thrust and sea-level ISP.")
-    for i, stage in enumerate(data.stages[1:], start=2):
-        if (stage.thrust_sl is None) != (stage.isp_sl is None):
-            raise HTTPException(422, f"Stage {i}: enter both sea-level thrust and ISP, or leave both blank.")
+            curve = booster.thrust_curve or []
+            if curve and (len(curve) < 2 or curve[0][0] != 0
+                    or any(t < 0 or thrust <= 0 for t, thrust in curve)
+                    or any(curve[j][0] >= curve[j + 1][0] for j in range(len(curve) - 1))):
+                raise HTTPException(422, f"Booster {i}: thrust_curve must have positive thrust, start at 0, and use strictly increasing times.")
     if data.use_timeline:
         if not data.timeline or len(data.timeline.stages) != len(data.stages):
             raise HTTPException(422, "Timeline must contain one event row for every original core stage.")
@@ -293,7 +301,7 @@ def simulate(data: SimulationInput):
             core = stages_cfg[0]
             groups = [bst.make_group(g.name, g.count, g.thrust_sl, g.thrust_vac,
                       g.isp_sl, g.isp_vac, g.prop_mass, g.dry_mass, g.burn_time,
-                      g.area, g.ignite_t, g.jettison_delay) for g in data.boost_groups]
+                      g.area, g.ignite_t, g.jettison_delay, g.thrust_curve) for g in data.boost_groups]
             phases, boost_log = bst.build_boost_phases(
                 core, groups, data.boost_throttle, data.solo_throttle, data.boost_auto_burn)
             boost_warnings = bst.validate(core, groups, phases)
@@ -339,7 +347,8 @@ def simulate(data: SimulationInput):
             s["prop_mass"], s["dry_mass"], s["burn_time"], s["area"],
             float(s.get("ignition_delay", 0.0)),
             s.get("burn_windows"),
-            s.get("separation_t")
+            s.get("separation_t"),
+            [(float(point[0]), float(point[1])) for point in s.get("thrust_curve", [])] or None
         ) for i, s in enumerate(stages_cfg)]
         vehicle = rp.Vehicle(
             stages=stages, payload=data.payload, fairing_mass=data.fairing_mass,
@@ -393,7 +402,16 @@ def simulate(data: SimulationInput):
             "photo_window_percent": float(visible["photo_window"].mean() * 100) if not visible.empty else 0.0,
             "visible_count": int(len(visible)),
         }
+        model_warnings = ["Ambient-pressure interpolation is a two-point approximation; no nozzle performance map is available."]
+        for i, stage in enumerate(data.stages, start=1):
+            if stage.isp_sl is None:
+                model_warnings.append(f"Stage {i}: ไม่มี ISP sea-level; ใช้ ISP vacuum เป็นค่าประมาณในบรรยากาศ")
+            if stage.thrust_sl is None:
+                model_warnings.append(f"Stage {i}: ไม่มี Thrust sea-level; ใช้ค่า vacuum เป็นค่าประมาณ")
+            if not stage.thrust_curve:
+                model_warnings.append(f"Stage {i}: ไม่มี Thrust-Time Curve; สมมติแรงขับ vacuum คงที่")
         return clean({
+            "model_warnings": model_warnings,
             "summary": summary, "elements": elements, "profile": profile,
             "visibility": {"first": first, "peak": peak, "closest": closest,
                            "last": last, "count": len(visible)},

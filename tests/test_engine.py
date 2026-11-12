@@ -77,3 +77,31 @@ def test_timeline_supports_restart_after_coast_without_resetting_propellant():
     assert not after_restart.empty and (after_restart["thrust_kN"] > 0).all()
     assert after_restart["mass"].iloc[-1] < at_coast["mass"].iloc[0]
     assert t_end >= 7.9
+
+
+
+def test_stage_ambient_pressure_endpoints_and_vacuum_curve():
+    stage = rp.Stage(
+        "Curve engine", 500_000.0, 1_000_000.0, 250.0, 300.0,
+        1000.0, 100.0, 100.0, 1.0,
+        thrust_curve=[(0.0, 1000.0), (10.0, 800.0)],
+    )
+    assert abs(stage.thrust(rp.P0, 0.0) - 500_000.0) < 1e-6
+    assert abs(stage.thrust(0.0, 0.0) - 1_000_000.0) < 1e-6
+    assert abs(stage.thrust(0.0, 5.0) - 900_000.0) < 1e-6
+
+
+
+def test_booster_thrust_curve_is_preserved_in_virtual_phases():
+    core = dict(name="Core", thrust_sl=1000.0, thrust_vac=1100.0,
+                isp_sl=270.0, isp_vac=300.0, prop_mass=10000.0,
+                dry_mass=1000.0, burn_time=100.0, area=3.0)
+    group = bst.make_group(
+        "P160C", 2, None, 4775.0, None, 278.5,
+        156000.0, 12000.0, 60.0, 9.0, 0.0, 2.0,
+        thrust_curve=[(0.0, 4775.0), (30.0, 4300.0), (60.0, 3500.0)],
+    )
+    phases, _ = bst.build_boost_phases(core, [group])
+    assert len(phases) >= 3
+    assert all(len(phase["thrust_curve"]) == 2 for phase in phases)
+    assert phases[0]["thrust_curve"][0][1] > phases[-2]["thrust_curve"][-1][1]
