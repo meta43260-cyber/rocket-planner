@@ -2,7 +2,7 @@ name: Rocket Planner tests
 
 on:
   push:
-    branches: [main, web-app-migration]
+    branches: [main, web-app-v2-full-features]
   pull_request:
     branches: [main]
 
