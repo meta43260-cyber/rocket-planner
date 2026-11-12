@@ -82,7 +82,7 @@ $("mission-form").addEventListener("submit",async ev=>{
 });
 
 
-// Published Supabase rocket catalog integration. Existing local presets remain available offline.
+// Published Supabase rocket catalog integration. Rocket selection is database-only.
 let databaseRockets = [];
 async function loadDatabaseRockets() {
   const select = $("database-rocket");
