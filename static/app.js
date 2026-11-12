@@ -13,9 +13,27 @@ function applyConfig(p){
  for(const k of ["obs_lat","obs_lon","obs_alt","min_elevation","timestep","orbit_count"])setVal(k,p[k]);
  if(p.auto_profile!==undefined){$("auto_profile").checked=!!p.auto_profile;$("manual-profile").classList.toggle("hidden",!!p.auto_profile)}
  $("mission_type").value=p.mission_type||"circular";
- $("target_apogee_alt").disabled=$("mission_type").value==="circular";
+ syncOrbitInputs();
 }
-$("mission_type").addEventListener("change",()=>{$("target_apogee_alt").disabled=$("mission_type").value==="circular"});
+function syncOrbitInputs(changed) {
+ const type=$("mission_type").value;
+ const apogee=$("target_apogee_alt");
+ const perigee=$("target_alt");
+ apogee.disabled=type==="escape";
+ if(type==="circular") {
+  if(changed==="apogee" && Number(apogee.value)!==Number(perigee.value)) {
+   $("mission_type").value="elliptical";
+   apogee.disabled=false;
+  } else {
+   apogee.value=perigee.value;
+  }
+ }
+}
+$("mission_type").addEventListener("change",()=>syncOrbitInputs());
+$("target_alt").addEventListener("input",()=>{
+ if($("mission_type").value==="circular") $("target_apogee_alt").value=$("target_alt").value;
+});
+$("target_apogee_alt").addEventListener("input",()=>syncOrbitInputs("apogee"));
 $("use_boost").addEventListener("change",()=> $("boost-fields").classList.toggle("hidden",!$("use_boost").checked));
 $("use_timeline").addEventListener("change",()=>{$("timeline-fields").classList.toggle("hidden",!$("use_timeline").checked);if($("use_timeline").checked){try{$("timeline_stages").value=JSON.stringify(stageTimeline(JSON.parse($("stages").value)),null,2)}catch(e){}}});
 $("auto_profile").addEventListener("change",()=> $("manual-profile").classList.toggle("hidden",$("auto_profile").checked));
