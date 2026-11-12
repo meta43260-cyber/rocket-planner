@@ -57,14 +57,14 @@ $("logout").onclick=()=>{token="";sessionStorage.removeItem("rp_admin_token");sh
 $("refresh").onclick=()=>load().catch(e=>status(e.message));
 const dbFields={
  rocket_stages:[["stage_number","ลำดับ Stage","number"],["name","ชื่อ Stage","text"],["thrust_sl_kn","Thrust sea level (kN) · ไม่บังคับ","number"],["thrust_vac_kn","Thrust vacuum (kN)","number"],["isp_sl_s","ISP sea level (s) · ไม่บังคับ","number"],["isp_vac_s","ISP vacuum (s)","number"],["prop_mass_kg","Propellant (kg)","number"],["dry_mass_kg","Dry mass (kg)","number"],["burn_time_s","Burn time (s)","number"],["reference_area_m2","Reference area (m²)","number"],["ignition_delay_s","Ignition delay (s)","number"]],
- rocket_boosters:[["name","ชื่อ Booster","text"],["quantity","จำนวน","number"],["thrust_sl_kn","Thrust sea level (kN)","number"],["thrust_vac_kn","Thrust vacuum (kN)","number"],["isp_sl_s","ISP sea level (s)","number"],["isp_vac_s","ISP vacuum (s)","number"],["prop_mass_kg","Propellant (kg)","number"],["dry_mass_kg","Dry mass (kg)","number"],["burn_time_s","Burn time (s)","number"],["reference_area_m2","Reference area (m²)","number"],["ignite_t_s","Ignition time (s)","number"],["jettison_delay_s","Jettison delay (s)","number"]],
+ rocket_boosters:[["name","ชื่อ Booster","text"],["quantity","จำนวน","number"],["thrust_sl_kn","Thrust sea level (kN) · ไม่บังคับ","number"],["thrust_vac_kn","Thrust vacuum (kN)","number"],["isp_sl_s","ISP sea level (s) · ไม่บังคับ","number"],["isp_vac_s","ISP vacuum (s)","number"],["prop_mass_kg","Propellant (kg)","number"],["dry_mass_kg","Dry mass (kg)","number"],["burn_time_s","Burn time (s)","number"],["reference_area_m2","Reference area (m²)","number"],["ignite_t_s","Ignition time (s)","number"],["jettison_delay_s","Jettison delay (s)","number"]],
  rocket_sources:[["title","ชื่อแหล่งข้อมูล","text"],["publisher","Publisher","text"],["source_type","ประเภทแหล่งข้อมูล","text"],["source_url","URL","url"],["confidence","ความเชื่อมั่น (A-D)","text"],["accessed_at","วันที่เข้าถึง","date"],["notes","หมายเหตุ","text"]]
 };
 function dbVal(id){return $(id).value.trim()}
 function dbNum(id){const v=dbVal(id);return v===""?null:Number(v)}
 function fillDbChildFields(row={}){
  const kind=$("db-child-type").value;
- $("db-child-fields").innerHTML=(kind==="rocket_stages"?'<p class="note" style="grid-column:1/-1">Stage 1 ต้องกรอกทั้ง Thrust SL และ ISP SL เพราะใช้คำนวณ TWR เริ่มต้น ส่วน Stage บนสามารถเว้นทั้งสองช่องได้เฉพาะเมื่อจุดเครื่องในสภาวะใกล้สุญญากาศ ระบบจะใช้ค่า Vacuum คงที่ตลอดการเผาไหม้ หากจุดเครื่องขณะยังมีความดันบรรยากาศ ควรกรอกค่า SL จริง</p>':"")+dbFields[kind].map(([key,label,type])=>'<label>'+esc(label)+'<input data-db-field="'+key+'" type="'+type+'" value="'+esc(row[key]??"")+'" '+(key==="source_url"?'placeholder="https://..."':(kind==="rocket_stages"&&(key==="thrust_sl_kn"||key==="isp_sl_s")?'placeholder="เว้นว่างได้"':""))+'></label>').join("");
+ $("db-child-fields").innerHTML=((kind==="rocket_stages"?'<p class="note" style="grid-column:1/-1">Stage 1 ต้องกรอกทั้ง Thrust SL และ ISP SL เพราะใช้คำนวณ TWR เริ่มต้น ส่วน Stage บนสามารถเว้นทั้งสองช่องได้เมื่อจุดเครื่องในสภาวะใกล้สุญญากาศ</p>':kind==="rocket_boosters"?'<p class="note" style="grid-column:1/-1">Booster: ถ้าไม่มีข้อมูล Thrust SL และ ISP SL ที่ยืนยันได้ ให้เว้นว่างทั้งคู่ได้ ระบบจะใช้ค่า Vacuum แทนเป็นค่าประมาณและแสดงคำเตือนในผลจำลอง (อาจประเมินแรงขับช่วงใกล้พื้นโลกสูงเกินจริง) ห้ามใส่ค่าคาดเดาเป็นข้อมูลจริง</p>':""))+dbFields[kind].map(([key,label,type])=>'<label>'+esc(label)+'<input data-db-field="'+key+'" type="'+type+'" value="'+esc(row[key]??"")+'" '+(key==="source_url"?'placeholder="https://..."':((kind==="rocket_stages"||kind==="rocket_boosters")&&(key==="thrust_sl_kn"||key==="isp_sl_s")?'placeholder="เว้นว่างได้"':""))+'></label>').join("");
 }
 function fillDbChildSelect(){
  const kind=$("db-child-type").value,vid=$("db-child-version").value;
@@ -148,6 +148,11 @@ $("db-save-child").addEventListener("click",async()=>{
    const a=payload.thrust_sl_kn!==null,b=payload.isp_sl_s!==null;
    if(Number(payload.stage_number)===1&&(!a||!b))throw Error("Stage 1 ต้องกรอกทั้ง Thrust SL และ ISP SL");
    if(a!==b)throw Error("กรอกทั้ง Thrust SL และ ISP SL หรือเว้นว่างทั้งคู่");
+  }
+  if(kind==="rocket_boosters"){
+   for(const key of ["thrust_sl_kn","isp_sl_s"])if(!(key in payload))payload[key]=null;
+   const hasThrust=payload.thrust_sl_kn!==null,hasIsp=payload.isp_sl_s!==null;
+   if(hasThrust!==hasIsp)throw Error("Booster: กรอกทั้ง Thrust SL และ ISP SL หรือเว้นว่างทั้งคู่");
   }
   if(kind==="rocket_sources"&&!payload.title)throw Error("กรอกชื่อแหล่งข้อมูล");
   const saved=id?await api("/admin/"+kind+"/"+encodeURIComponent(id),"PATCH",payload):await api("/admin/versions/"+encodeURIComponent(vid)+"/"+kind,"POST",payload);
