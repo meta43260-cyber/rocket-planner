@@ -257,6 +257,13 @@ def simulate(data: SimulationInput):
                 raise HTTPException(422, f"Stage {i}: thrust_curve values must be positive and times non-negative.")
             if any(points[j][0] >= points[j + 1][0] for j in range(len(points) - 1)):
                 raise HTTPException(422, f"Stage {i}: thrust_curve times must be strictly increasing.")
+    if data.use_boost:
+        for i, booster in enumerate(data.boost_groups, start=1):
+            curve = booster.thrust_curve or []
+            if curve and (len(curve) < 2 or curve[0][0] != 0
+                    or any(t < 0 or thrust <= 0 for t, thrust in curve)
+                    or any(curve[j][0] >= curve[j + 1][0] for j in range(len(curve) - 1))):
+                raise HTTPException(422, f"Booster {i}: thrust_curve must have positive thrust, start at 0, and use strictly increasing times.")
     if data.use_timeline:
         if not data.timeline or len(data.timeline.stages) != len(data.stages):
             raise HTTPException(422, "Timeline must contain one event row for every original core stage.")
