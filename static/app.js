@@ -116,7 +116,9 @@ async function loadDatabaseRockets() {
   }
 }
 function loadDatabaseRocket() {
-  const index = Number($("database-rocket").value);
+  const selected = $("database-rocket").value;
+  if (selected === "") return;
+  const index = Number(selected);
   if (!Number.isInteger(index) || !databaseRockets[index]) return;
   const rocket = databaseRockets[index];
   const version = rocket.current_version || {};
@@ -138,9 +140,9 @@ function loadDatabaseRocket() {
     target_apogee_alt: version.target_apogee_alt ?? version.target_alt ?? 550,
     target_inc: version.target_inc ?? 53,
     mission_type: version.mission_type ?? "circular",
-    site_lat: version.site_lat ?? 0,
-    site_lon: version.site_lon ?? 0,
-    site_alt: version.site_alt ?? 0,
+    site_lat: version.site_lat ?? n("site_lat"),
+    site_lon: version.site_lon ?? n("site_lon"),
+    site_alt: version.site_alt ?? n("site_alt"),
   };
   applyConfig(config);
   $("preset").value = "custom";
