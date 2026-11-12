@@ -19,5 +19,5 @@ jobs:
           node-version: "20"
       - name: Compile Python modules
         run: python -m compileall -q main.py supabase_api.py rocket_planner.py booster.py
-      - name: Check admin JavaScript
-        run: node --check static/admin.js
+      - name: Check browser JavaScript
+        run: node --check static/app.js && node --check static/admin.js
