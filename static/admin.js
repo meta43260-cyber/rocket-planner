@@ -62,7 +62,7 @@ function dbVal(id){return $(id).value.trim()}
 function dbNum(id){const v=dbVal(id);return v===""?null:Number(v)}
 function fillDbChildFields(row={}){
  const kind=$("db-child-type").value;
- $("db-child-fields").innerHTML=(kind==="rocket_stages"?'<p class="note" style="grid-column:1/-1">Stage ที่ทำงานในบรรยากาศควรกรอกค่า Sea level ส่วนสเตจบนที่จุดเครื่องในอวกาศสามารถเว้น Thrust SL และ ISP SL ว่างได้ โดยกรอกค่า Vacuum ตามข้อมูลจริง</p>':"")+dbFields[kind].map(([key,label,type])=>'<label>'+esc(label)+'<input data-db-field="'+key+'" type="'+type+'" value="'+esc(row[key]??"")+'" '+(key==="source_url"?'placeholder="https://..."':(kind==="rocket_stages"&&(key==="thrust_sl_kn"||key==="isp_sl_s")?'placeholder="เว้นว่างได้"':""))+'></label>').join("");
+ $("db-child-fields").innerHTML=(kind==="rocket_stages"?'<p class="note" style="grid-column:1/-1">Stage 1 ต้องกรอกทั้ง Thrust SL และ ISP SL เพราะใช้คำนวณ TWR เริ่มต้น ส่วน Stage บนสามารถเว้นทั้งสองช่องได้เฉพาะเมื่อจุดเครื่องในสภาวะใกล้สุญญากาศ ระบบจะใช้ค่า Vacuum คงที่ตลอดการเผาไหม้ หากจุดเครื่องขณะยังมีความดันบรรยากาศ ควรกรอกค่า SL จริง</p>':"")+dbFields[kind].map(([key,label,type])=>'<label>'+esc(label)+'<input data-db-field="'+key+'" type="'+type+'" value="'+esc(row[key]??"")+'" '+(key==="source_url"?'placeholder="https://..."':(kind==="rocket_stages"&&(key==="thrust_sl_kn"||key==="isp_sl_s")?'placeholder="เว้นว่างได้"':""))+'></label>').join("");
 }
 function fillDbChildSelect(){
  const kind=$("db-child-type").value,vid=$("db-child-version").value;
