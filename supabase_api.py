@@ -169,3 +169,73 @@ def admin_rockets(authorization: str | None = Header(default=None)):
         "rockets": _rows(client, "rockets"),
         "versions": _rows(client, "rocket_versions"),
     }
+
+
+from fastapi import Body
+
+
+def _admin_client(authorization: str | None):
+    client = _client(authorization)
+    _require_admin(client)
+    return client
+
+
+def _insert(client: SupabaseREST, table: str, payload: dict):
+    result = client.call(f"/rest/v1/{table}", method="POST", body=payload,
+                         prefer="return=representation")
+    return result[0] if isinstance(result, list) and result else result
+
+
+def _update(client: SupabaseREST, table: str, row_id: str, payload: dict):
+    query = urlencode({"id": f"eq.{row_id}"})
+    result = client.call(f"/rest/v1/{table}?{query}", method="PATCH",
+                         body=payload, prefer="return=representation")
+    if not result:
+        raise HTTPException(status_code=404, detail="Record not found or not editable.")
+    return result[0] if isinstance(result, list) else result
+
+
+@router.post("/admin/rockets")
+def create_rocket(payload: dict = Body(...), authorization: str | None = Header(default=None)):
+    client = _admin_client(authorization)
+    return _insert(client, "rockets", payload)
+
+
+@router.patch("/admin/rockets/{rocket_id}")
+def update_rocket(rocket_id: str, payload: dict = Body(...),
+                  authorization: str | None = Header(default=None)):
+    client = _admin_client(authorization)
+    return _update(client, "rockets", rocket_id, payload)
+
+
+@router.post("/admin/rockets/{rocket_id}/versions")
+def create_draft_version(rocket_id: str, payload: dict = Body(...),
+                         authorization: str | None = Header(default=None)):
+    client = _admin_client(authorization)
+    draft = {**payload, "rocket_id": rocket_id, "status": "draft", "is_current": False}
+    return _insert(client, "rocket_versions", draft)
+
+
+@router.patch("/admin/versions/{version_id}")
+def update_draft_version(version_id: str, payload: dict = Body(...),
+                          authorization: str | None = Header(default=None)):
+    client = _admin_client(authorization)
+    if "status" in payload or "is_current" in payload:
+        raise HTTPException(status_code=400, detail="Use the Publish action to change revision status.")
+    return _update(client, "rocket_versions", version_id, payload)
+
+
+@router.post("/admin/versions/{version_id}/publish")
+def publish_version(version_id: str, authorization: str | None = Header(default=None)):
+    client = _admin_client(authorization)
+    return client.call("/rest/v1/rpc/publish_rocket_version", method="POST",
+                       body={"p_version_id": version_id})
+
+
+@router.post("/admin/versions/{version_id}/{child_table}")
+def add_version_child(version_id: str, child_table: str, payload: dict = Body(...),
+                      authorization: str | None = Header(default=None)):
+    client = _admin_client(authorization)
+    if child_table not in {"rocket_stages", "rocket_boosters", "rocket_sources"}:
+        raise HTTPException(status_code=404, detail="Unsupported revision data type.")
+    return _insert(client, child_table, {**payload, "version_id": version_id})
