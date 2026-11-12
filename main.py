@@ -28,10 +28,10 @@ app.include_router(supabase_api.router)
 
 class StageInput(BaseModel):
     name: str = "Stage"
-    # Sea-level values are optional only for upper stages that ignite in near-vacuum.
+    # Stage 1 needs sea-level thrust for liftoff TWR; missing ISP SL is explicitly approximated.
     thrust_sl: float | None = Field(default=None, gt=0, description="Sea-level thrust, kN; required for Stage 1")
     thrust_vac: float = Field(gt=0, description="Vacuum thrust, kN")
-    isp_sl: float | None = Field(default=None, gt=0, description="Sea-level ISP; required for Stage 1")
+    isp_sl: float | None = Field(default=None, gt=0, description="Sea-level ISP; optional, vacuum ISP fallback is warned")
     isp_vac: float = Field(gt=0)
     prop_mass: float = Field(gt=0, description="Propellant mass, kg")
     dry_mass: float = Field(ge=0, description="Dry mass, kg")
@@ -401,7 +401,7 @@ def simulate(data: SimulationInput):
             "photo_window_percent": float(visible["photo_window"].mean() * 100) if not visible.empty else 0.0,
             "visible_count": int(len(visible)),
         }
-        model_warnings = []
+        model_warnings = ["Ambient-pressure interpolation is a two-point approximation; no nozzle performance map is available."]
         for i, stage in enumerate(data.stages, start=1):
             if stage.isp_sl is None:
                 model_warnings.append(f"Stage {i}: ไม่มี ISP sea-level; ใช้ ISP vacuum เป็นค่าประมาณในบรรยากาศ")
