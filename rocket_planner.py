@@ -124,12 +124,11 @@ class Mission:
     site_lon: float
     site_alt: float = 0.0
     target_alt: float = 500e3
-    target_inc: float = 51.6
+    launch_azimuth_deg: float = 90.0
     launch_jd: float = 2451545.0
     vertical_time: float = 10.0
     kick_angle: float = 6.5
     kick_duration: float = 14.0
-    ascend_east: bool = True
     mission_type: str = "circular"
     target_apogee_alt: float = 500e3
     auto_profile: bool = False
@@ -194,20 +193,22 @@ def sun_unit_eci(jd: float):
 # ============================================================
 # Launch azimuth
 # ============================================================
-def launch_azimuth(site_lat_deg, inc_deg, target_alt, ascend_east=True):
+def launch_azimuth(site_lat_deg, azimuth_deg, target_alt):
+    """Use the operator-entered, Earth-fixed compass azimuth directly.
+
+    The inertial azimuth and Earth-rotation contribution are reference
+    diagnostics at the target circular speed; they do not change the
+    entered heading used by the ascent steering law.
+    """
     lat = site_lat_deg * D2R
-    inc = abs(inc_deg) * D2R
-    c = np.cos(inc) / max(np.cos(lat), 1e-9)
-    c = float(np.clip(c, -1.0, 1.0))
-    az_i = np.arcsin(c)
-    if not ascend_east:
-        az_i = np.pi - az_i
-    v_orb = np.sqrt(MU / (RE + target_alt))
-    ve = v_orb * np.sin(az_i)
-    vn = v_orb * np.cos(az_i)
+    az_r = float(azimuth_deg) % 360.0
+    az = az_r * D2R
+    v_ref = np.sqrt(MU / (RE + target_alt))
     v_earth = OMEGA_E * RE * np.cos(lat)
-    az_r = np.arctan2(ve - v_earth, vn)
-    return (az_r * R2D) % 360.0, (az_i * R2D) % 360.0, v_earth * np.sin(az_i)
+    v_east_inertial = v_ref * np.sin(az) + v_earth
+    v_north_inertial = v_ref * np.cos(az)
+    az_i = np.arctan2(v_east_inertial, v_north_inertial)
+    return az_r, (az_i * R2D) % 360.0, v_earth * np.sin(az)
 
 # ============================================================
 # AUTO ASCENT PROFILE  (ใหม่ — แก้ปัญหาไม่รู้โปรไฟล์การไต่)
@@ -231,8 +232,8 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
                     dt: float = 0.05, dt_out: float = 0.5,
                     max_time: float = 2000.0, verbose: bool = True):
     theta0 = gmst(mission.launch_jd)
-    az_r, az_i, v_bonus = launch_azimuth(mission.site_lat, mission.target_inc,
-                                          mission.target_alt, mission.ascend_east)
+    az_r, az_i, v_bonus = launch_azimuth(mission.site_lat, mission.launch_azimuth_deg,
+                                          mission.target_alt)
     az = az_r * D2R
 
     # --- โปรไฟล์การไต่ ---
@@ -695,7 +696,7 @@ if __name__ == "__main__":
                   ignition_delay=5.0),
         ], payload=15000, fairing_mass=1900, fairing_jettison_alt=110e3)
     m = Mission(site_lat=28.5619, site_lon=-80.5772, site_alt=10,
-                target_alt=550e3, target_inc=53.0, launch_jd=2460600.5,
+                target_alt=550e3, launch_azimuth_deg=42.4, launch_jd=2460600.5,
                 auto_profile=True)
     asc, st, te, th0, az = simulate_ascent(f9, m)
     print(f"Azimuth  rot={az[0]:.1f}°  inert={az[1]:.1f}°  bonus={az[2]:.0f} m/s")
