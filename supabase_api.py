@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
 import os
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
@@ -15,6 +16,8 @@ from urllib.request import Request, urlopen
 
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import Response
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["rocket-database"])
 
@@ -50,7 +53,14 @@ class SupabaseREST:
         try:
             with urlopen(req, timeout=15) as response:
                 raw = response.read()
-                return json.loads(raw.decode("utf-8")) if raw else None
+                if not raw:
+                    return None
+                try:
+                    return json.loads(raw.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    logger.error("Supabase returned a non-JSON response for %s %s (content-type=%s, bytes=%d)",
+                                 method, path, response.headers.get("Content-Type", "unknown"), len(raw))
+                    raise HTTPException(status_code=502, detail="Supabase returned an invalid response.") from exc
         except HTTPError as exc:
             # Do not relay provider internals or tokens to the public client.
             if exc.code in (401, 403):
@@ -59,7 +69,13 @@ class SupabaseREST:
                 raise HTTPException(status_code=404, detail="Rocket record not found.") from exc
             raise HTTPException(status_code=502, detail=f"Supabase request failed ({exc.code}).") from exc
         except (URLError, TimeoutError) as exc:
+            logger.warning("Supabase connection failed for %s %s: %s", method, path, type(exc).__name__)
             raise HTTPException(status_code=503, detail="Supabase is temporarily unreachable.") from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Unexpected Supabase REST failure for %s %s (%s)", method, path, type(exc).__name__)
+            raise HTTPException(status_code=502, detail="Supabase request could not be processed.") from exc
 
 
 def _rows(client: SupabaseREST, table: str, query: dict[str, str] | None = None):
