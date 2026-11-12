@@ -143,4 +143,5 @@ $("db-save-child").onclick=async()=>{
   status(id?"แก้ไขข้อมูลแล้ว":"เพิ่มข้อมูลแล้ว");await load();$("db-child-version").value=vid;fillDbChildSelect();if(saved.id)$("db-child-select").value=saved.id;$("db-child-select").dispatchEvent(new Event("change"));
  }catch(e){status(e.message)}
 };
-\nshow();if(token)load().catch(e=>{status(e.message);token="";sessionStorage.removeItem("rp_admin_token");show()});
+
+show();if(token)load().catch(e=>{status(e.message);token="";sessionStorage.removeItem("rp_admin_token");show()});
