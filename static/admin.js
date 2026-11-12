@@ -22,7 +22,7 @@ function renderCatalog(data){
     const sources=(data.sources||[]).filter(x=>x.version_id===v.id);
     const conf=v.confidence||"—";
     return '<section class="version-entry"><div class="version-head"><strong>Revision '+esc(v.revision)+'</strong><span class="pill draft">'+esc(v.status)+' · '+esc(conf)+'</span></div>'+
-     '<div class="metric-grid"><div><small>Payload mass</small><b>'+n(v.payload_mass_kg,' kg')+'</b></div><div><small>LEO capacity</small><b>'+n(v.payload_capacity_leo_kg,' kg')+'</b></div><div><small>Fairing mass</small><b>'+n(v.fairing_mass_kg,' kg')+'</b></div><div><small>Fairing jettison</small><b>'+n(v.fairing_jettison_alt_km,' km')+'</b></div></div>'+
+     '<div class="metric-grid"><div><small>LEO capacity</small><b>'+n(v.payload_capacity_leo_kg,' kg')+'</b></div><div><small>Fairing mass</small><b>'+n(v.fairing_mass_kg,' kg')+'</b></div></div>'+
      '<p class="note">'+esc(v.notes||"ไม่มีหมายเหตุ")+'</p>'+
      '<h4>Stages ('+stages.length+')</h4>'+(stages.length?'<div class="table-wrap"><table><thead><tr><th>Stage</th><th>Thrust SL/Vac (kN)</th><th>ISP SL/Vac (s)</th><th>Propellant (kg)</th><th>Dry (kg)</th><th>Burn (s)</th></tr></thead><tbody>'+stages.map(s=>'<tr><td>'+esc(s.stage_number)+'. '+esc(s.name)+'</td><td>'+n(s.thrust_sl_kn)+' / '+n(s.thrust_vac_kn)+'</td><td>'+n(s.isp_sl_s)+' / '+n(s.isp_vac_s)+'</td><td>'+n(s.prop_mass_kg)+'</td><td>'+n(s.dry_mass_kg)+'</td><td>'+n(s.burn_time_s)+'</td></tr>').join("")+'</tbody></table></div>':'<p class="muted">ไม่มีข้อมูล Stage</p>')+
      '<h4>Boosters ('+boosters.length+')</h4>'+(boosters.length?'<div class="table-wrap"><table><thead><tr><th>ชื่อ</th><th>จำนวน</th><th>Thrust SL/Vac (kN)</th><th>Propellant (kg)</th><th>Burn (s)</th><th>Ignition (s)</th></tr></thead><tbody>'+boosters.map(b=>'<tr><td>'+esc(b.name)+'</td><td>'+n(b.quantity)+'</td><td>'+n(b.thrust_sl_kn)+' / '+n(b.thrust_vac_kn)+'</td><td>'+n(b.prop_mass_kg)+'</td><td>'+n(b.burn_time_s)+'</td><td>'+n(b.ignite_t_s)+'</td></tr>').join("")+'</tbody></table></div>':'<p class="muted">ไม่มี Booster</p>')+
@@ -54,7 +54,7 @@ $("login").onclick=async()=>{try{const r=await fetch("/api/admin/login",{method:
 $("logout").onclick=()=>{token="";sessionStorage.removeItem("rp_admin_token");show()};
 $("refresh").onclick=()=>load().catch(e=>status(e.message));
 const dbFields={
- rocket_stages:[["stage_number","ลำดับ Stage","number"],["name","ชื่อ Stage","text"],["thrust_sl_kn","Thrust sea level (kN)","number"],["thrust_vac_kn","Thrust vacuum (kN)","number"],["isp_sl_s","ISP sea level (s)","number"],["isp_vac_s","ISP vacuum (s)","number"],["prop_mass_kg","Propellant (kg)","number"],["dry_mass_kg","Dry mass (kg)","number"],["burn_time_s","Burn time (s)","number"],["reference_area_m2","Reference area (m²)","number"],["ignition_delay_s","Ignition delay (s)","number"]],
+ rocket_stages:[["stage_number","ลำดับ Stage","number"],["name","ชื่อ Stage","text"],["thrust_sl_kn","Thrust sea level (kN) · ไม่บังคับ","number"],["thrust_vac_kn","Thrust vacuum (kN)","number"],["isp_sl_s","ISP sea level (s) · ไม่บังคับ","number"],["isp_vac_s","ISP vacuum (s)","number"],["prop_mass_kg","Propellant (kg)","number"],["dry_mass_kg","Dry mass (kg)","number"],["burn_time_s","Burn time (s)","number"],["reference_area_m2","Reference area (m²)","number"],["ignition_delay_s","Ignition delay (s)","number"]],
  rocket_boosters:[["name","ชื่อ Booster","text"],["quantity","จำนวน","number"],["thrust_sl_kn","Thrust sea level (kN)","number"],["thrust_vac_kn","Thrust vacuum (kN)","number"],["isp_sl_s","ISP sea level (s)","number"],["isp_vac_s","ISP vacuum (s)","number"],["prop_mass_kg","Propellant (kg)","number"],["dry_mass_kg","Dry mass (kg)","number"],["burn_time_s","Burn time (s)","number"],["reference_area_m2","Reference area (m²)","number"],["ignite_t_s","Ignition time (s)","number"],["jettison_delay_s","Jettison delay (s)","number"]],
  rocket_sources:[["title","ชื่อแหล่งข้อมูล","text"],["publisher","Publisher","text"],["source_type","ประเภทแหล่งข้อมูล","text"],["source_url","URL","url"],["confidence","ความเชื่อมั่น (A-D)","text"],["accessed_at","วันที่เข้าถึง","date"],["notes","หมายเหตุ","text"]]
 };
@@ -62,7 +62,7 @@ function dbVal(id){return $(id).value.trim()}
 function dbNum(id){const v=dbVal(id);return v===""?null:Number(v)}
 function fillDbChildFields(row={}){
  const kind=$("db-child-type").value;
- $("db-child-fields").innerHTML=dbFields[kind].map(([key,label,type])=>'<label>'+esc(label)+'<input data-db-field="'+key+'" type="'+type+'" value="'+esc(row[key]??"")+'" '+(key==="source_url"?'placeholder="https://..."':"")+'></label>').join("");
+ $("db-child-fields").innerHTML=(kind==="rocket_stages"?'<p class="note" style="grid-column:1/-1">Stage ที่ทำงานในบรรยากาศควรกรอกค่า Sea level ส่วนสเตจบนที่จุดเครื่องในอวกาศสามารถเว้น Thrust SL และ ISP SL ว่างได้ โดยกรอกค่า Vacuum ตามข้อมูลจริง</p>':"")+dbFields[kind].map(([key,label,type])=>'<label>'+esc(label)+'<input data-db-field="'+key+'" type="'+type+'" value="'+esc(row[key]??"")+'" '+(key==="source_url"?'placeholder="https://...":(kind==="rocket_stages"&&(key==="thrust_sl_kn"||key==="isp_sl_s")?'placeholder="เว้นว่างได้"':""))+'></label>').join("");
 }
 function fillDbChildSelect(){
  const kind=$("db-child-type").value,vid=$("db-child-version").value;
@@ -85,10 +85,8 @@ function fillDbVersionForm(){
  const v=(catalogData?.versions||[]).find(x=>x.id===$("db-version-select").value);
  $("db-revision").value=v?.revision??Math.max(1,...(catalogData?.versions||[]).filter(x=>x.rocket_id===$("db-version-rocket").value).map(x=>Number(x.revision)+1));
  $("db-confidence").value=v?.confidence||"D";
- $("db-payload").value=v?.payload_mass_kg??"";
  $("db-capacity").value=v?.payload_capacity_leo_kg??"";
  $("db-fairing").value=v?.fairing_mass_kg??"";
- $("db-jettison").value=v?.fairing_jettison_alt_km??"";
  $("db-version-notes").value=v?.notes||"";
 }
 function refreshDbSelects(){
@@ -128,7 +126,7 @@ $("db-save-version").onclick=async()=>{
  try{
   const rid=dbVal("db-version-rocket"),id=dbVal("db-version-select");
   if(!rid)throw Error("เลือกจรวดก่อน");
-  const payload={revision:dbNum("db-revision"),confidence:dbVal("db-confidence"),payload_mass_kg:dbNum("db-payload"),payload_capacity_leo_kg:dbNum("db-capacity"),fairing_mass_kg:dbNum("db-fairing"),fairing_jettison_alt_km:dbNum("db-jettison"),notes:dbVal("db-version-notes")||null};
+  const payload={revision:dbNum("db-revision"),confidence:dbVal("db-confidence"),payload_capacity_leo_kg:dbNum("db-capacity"),fairing_mass_kg:dbNum("db-fairing"),notes:dbVal("db-version-notes")||null};
   Object.keys(payload).forEach(k=>{if(payload[k]===null)delete payload[k]});
   const saved=id?await api("/admin/versions/"+encodeURIComponent(id),"PATCH",payload):await api("/admin/rockets/"+encodeURIComponent(rid)+"/versions","POST",payload);
   status(id?"แก้ไข Revision แล้ว":"สร้าง Draft Revision แล้ว");await load();$("db-version-rocket").value=rid;fillDbVersionSelect();$("db-version-select").value=saved.id;fillDbVersionForm();
