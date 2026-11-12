@@ -111,7 +111,19 @@ function loadDatabaseRocket() {
   if (!Number.isInteger(index) || !databaseRockets[index]) return;
   const rocket = databaseRockets[index];
   const version = rocket.current_version || {};
-  const stages = version.stages || [];
+  // Convert Supabase column names/units to the simulation API contract.
+  const stages = (version.stages || []).map((stage, i) => ({
+    name: stage.name || "Stage " + (stage.stage_number ?? i + 1),
+    thrust_sl: stage.thrust_sl_kn ?? null,
+    thrust_vac: stage.thrust_vac_kn,
+    isp_sl: stage.isp_sl_s ?? null,
+    isp_vac: stage.isp_vac_s,
+    prop_mass: stage.prop_mass_kg,
+    dry_mass: stage.dry_mass_kg,
+    burn_time: stage.burn_time_s,
+    area: stage.reference_area_m2,
+    ignition_delay: stage.ignition_delay_s ?? 0,
+  }));
   if (!stages.length) {
     $("stages").value = "[]";
     $("boost_groups").value = "[]";
@@ -120,7 +132,20 @@ function loadDatabaseRocket() {
     $("database-status").textContent = "รายการนี้ยังไม่มี Stage data จึงยังนำไปจำลองไม่ได้";
     return;
   }
-  const boosters = version.boosters || [];
+  const boosters = (version.boosters || []).map(booster => ({
+    name: booster.name || "SRB",
+    count: booster.quantity,
+    thrust_sl: booster.thrust_sl_kn,
+    thrust_vac: booster.thrust_vac_kn,
+    isp_sl: booster.isp_sl_s,
+    isp_vac: booster.isp_vac_s,
+    prop_mass: booster.prop_mass_kg,
+    dry_mass: booster.dry_mass_kg,
+    burn_time: booster.burn_time_s,
+    area: booster.reference_area_m2,
+    ignite_t: booster.ignite_t_s ?? 0,
+    jettison_delay: booster.jettison_delay_s ?? 2,
+  }));
   const config = {
     ...version,
     stages,
