@@ -41,6 +41,7 @@ function svgLineChart(id,series,options={}){
  series.forEach((s,i)=>{let d="",started=false,r=s.axis==="right"&&yr?yr:yl;s.rows.forEach(p=>{let x=Number(p[s.x]),y=Number(p[s.y]);if(!Number.isFinite(x)||!Number.isFinite(y)){started=false;return}d+=(started?" L":"M")+X(x).toFixed(1)+","+Y(y,r).toFixed(1);started=true});z+='<path d="'+d+'" fill="none" stroke="'+(s.color||pal[i%pal.length])+'" stroke-width="2.5"/>'});
  let lx=L;series.forEach((s,i)=>{z+='<line x1="'+lx+'" y1="'+(H-1)+'" x2="'+(lx+16)+'" y2="'+(H-1)+'" stroke="'+(s.color||pal[i%pal.length])+'" stroke-width="3"/><text x="'+(lx+21)+'" y="'+(H+1)+'" fill="#aebfd0" font-size="11">'+s.name+'</text>';lx+=Math.max(110,s.name.length*7+35)});el.innerHTML=z+'</svg>';
 }
+function renderChartSafely(id,fn){try{fn()}catch(err){const el=$(id);if(el)el.innerHTML='<p class="hint">กราฟนี้แสดงผลไม่ได้: '+String(err&&err.message||err).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))+'</p>';console.error("Chart render failed:",id,err)}}
 function svgSkyChart(id,rows,minEl){
  const el=$(id),v=rows.filter(r=>Number(r.el_deg)>Number(minEl));if(!el)return;if(!v.length){el.innerHTML='<p class="hint">ไม่มีช่วงที่ผ่าน elevation threshold</p>';return}
  const W=420,cx=210,cy=165,rad=132;let z='<svg viewBox="0 0 420 340" style="width:100%;height:auto;display:block">';
@@ -73,16 +74,16 @@ function render(data,p){
  tableRows("events-table tbody",data.events||[],[r=>r.event,r=>safe(r.t,1),r=>safe(r.alt_km,1),r=>safe(r.velocity_mps,0)]);
  const bp=$("boost-panel");if(data.boost_log?.length){bp.classList.remove("hidden");tableRows("boost-table tbody",data.boost_log,[r=>safe(r.t0,1)+"–"+safe(r.t1,1),r=>r.name,r=>safe(r.F_sl,0)+" kN",r=>safe(r.isp_vac,1),r=>safe(r.prop/1000,2)+" t",r=>safe(r.jett/1000,2)+" t"])}else bp.classList.add("hidden");
  const a=data.ascent,l=data.look;
-  svgLineChart("alt-chart",[{rows:a,x:"t",y:"alt_km",name:"Altitude (km)"},{rows:a,x:"t",y:"v_relative",name:"Velocity (m/s)",axis:"right"}],{rightAxis:true});
-  svgLineChart("aero-chart",[{rows:a,x:"t",y:"q_KPa",name:"Dynamic pressure (kPa)"},{rows:a,x:"t",y:"mach",name:"Mach",axis:"right"}],{rightAxis:true});
-  svgLineChart("flight-chart",[{rows:a,x:"t",y:"fpa_deg",name:"Flight path angle (°)"},{rows:a,x:"t",y:"acc_g",name:"Acceleration (g)",axis:"right"}],{rightAxis:true});
-  svgLineChart("look-chart",[{rows:l,x:"t",y:"el_deg",name:"Elevation (°)"},{rows:l,x:"t",y:"az_deg",name:"Azimuth (°)",axis:"right"}],{rightAxis:true});
+  renderChartSafely("alt-chart",()=>svgLineChart("alt-chart",[{rows:a,x:"t",y:"alt_km",name:"Altitude (km)"},{rows:a,x:"t",y:"v_relative",name:"Velocity (m/s)",axis:"right"}],{rightAxis:true}));
+  renderChartSafely("aero-chart",()=>svgLineChart("aero-chart",[{rows:a,x:"t",y:"q_kPa",name:"Dynamic pressure (kPa)"},{rows:a,x:"t",y:"mach",name:"Mach",axis:"right"}],{rightAxis:true}));
+  renderChartSafely("flight-chart",()=>svgLineChart("flight-chart",[{rows:a,x:"t",y:"fpa_deg",name:"Flight path angle (°)"},{rows:a,x:"t",y:"acc_g",name:"Acceleration (g)",axis:"right"}],{rightAxis:true}));
+  renderChartSafely("look-chart",()=>svgLineChart("look-chart",[{rows:l,x:"t",y:"el_deg",name:"Elevation (°)"},{rows:l,x:"t",y:"az_deg",name:"Azimuth (°)",axis:"right"}],{rightAxis:true}));
   const vis=l.filter(x=>x.el_deg>p.min_elevation);
  const cards=[["FIRST VISIBLE",v.first?.t!==undefined?"T+"+safe(v.first.t,1)+" s":"—"],["PEAK ELEVATION",v.peak?safe(v.peak.el_deg,1)+"°":"—"],["CLOSEST RANGE",v.closest?safe(v.closest.range_km,1)+" km":"—"],["LAST VISIBLE",v.last?.t!==undefined?"T+"+safe(v.last.t,1)+" s":"—"],["SUNLIT WHILE VISIBLE",safe(s.sunlit_percent,0)+"%"],["TWILIGHT PHOTO WINDOW",safe(s.photo_window_percent,0)+"%"]];
  $("visibility").innerHTML=cards.map(([k,x])=>`<div class="vis-item"><span>${k}</span><b>${x}</b></div>`).join("");
  $("report").textContent=data.report;
- svgSkyChart("sky-chart",l,p.min_elevation);
-  svgLineChart("sun-chart",[{rows:l,x:"t",y:"sun_el_deg",name:"Sun elevation"},{rows:l,x:"t",y:"el_deg",name:"Rocket elevation"}]);
+ renderChartSafely("sky-chart",()=>svgSkyChart("sky-chart",l,p.min_elevation));
+  renderChartSafely("sun-chart",()=>svgLineChart("sun-chart",[{rows:l,x:"t",y:"sun_el_deg",name:"Sun elevation"},{rows:l,x:"t",y:"el_deg",name:"Rocket elevation"}]));
   const table=vis.filter(x=>Math.abs((x.t/10)-Math.round(x.t/10))<.035);tableRows("look-table tbody",table,[r=>safe(r.t,1),r=>safe(r.az_deg,2),r=>safe(r.el_deg,2),r=>safe(r.range_km,2),r=>safe(r.alt_km,2),r=>safe(r.angular_rate,3)]);
  const entries=[["Semi-major axis",e.a_km,"km"],["Eccentricity",e.e,""],["Inclination",e.inc_deg,"°"],["RAAN",e.raan_deg,"°"],["Argument of periapsis",e.argp_deg,"°"],["True anomaly",e.ta_deg,"°"],["Orbital period",e.period_min,"min"],["Earth rotation bonus",s.earth_rotation_bonus_mps,"m/s"]];
  $("elements").innerHTML=entries.map(([k,x,u])=>`<div class="element"><span>${k}</span><b>${x===null?"—":safe(x,2)+u}</b></div>`).join("");
