@@ -83,7 +83,7 @@ function setupCurveEditor(box,initial){
  const body=box.querySelector("[data-curve-rows]");
  const add=(point=[0,1000])=>{
   const tr=document.createElement("tr");tr.setAttribute("data-curve-row","");
-  tr.innerHTML='<td><input data-curve-time type="number" min="0" step="any" value="'+esc(point[0])+'"></td><td><input data-curve-thrust type="number" min="0.000001" step="any" value="'+esc(point[1])+'"></td><td><button type="button" class="curve-remove" title="ลบจุดนี้">ลบ</button></td>';
+  tr.innerHTML='<td><input data-curve-time type="number" min="0" step="any" value="'+esc(point[0])+'"></td><td><input data-curve-thrust type="number" min="0.000001" step="any" value="'+esc(point[1])+'"></td><td><button type="button" class="curve-remove" data-curve-remove title="ลบจุดนี้">ลบ</button></td>';
   body.appendChild(tr);
  };
  (Array.isArray(initial)?initial:[]).forEach(add);
@@ -177,6 +177,11 @@ $("db-save-child").addEventListener("click",async()=>{
  try{
   const vid=dbVal("db-child-version"),kind=$("db-child-type").value,id=dbVal("db-child-select");
   if(!vid)throw Error("ยังไม่มี Draft Revision · กรุณาสร้างหรือเลือก Draft ก่อน");
+  const curveBox=$("db-child-fields").querySelector(".curve-editor");
+  if(curveBox){
+   const points=curvePointsFromEditor(curveBox);
+   if(points.length&& (points.length<2||points[0][0]!==0||points.some((p,i)=>!Number.isFinite(p[0])||!Number.isFinite(p[1])||p[0]<0||p[1]<=0||(i>0&&p[0]<=points[i-1][0]))))throw Error("Thrust-Time Curve ต้องมีอย่างน้อย 2 จุด เริ่มที่ 0 วินาที ใช้แรงขับมากกว่า 0 และเวลาเพิ่มขึ้นทุกจุด");
+  }
   const payload={};$("db-child-fields").querySelectorAll("[data-db-field]").forEach(el=>{const v=el.value.trim();if(v!=="")payload[el.dataset.dbField]=el.dataset.dbField==="thrust_curve_json"?JSON.parse(v):(el.type==="number"?Number(v):v)});
   if(kind==="rocket_stages"){
    for(const key of ["thrust_sl_kn","isp_sl_s"])if(!(key in payload))payload[key]=null;
