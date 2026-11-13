@@ -1,4 +1,5 @@
 const $=id=>document.getElementById(id);
+const plotlyReady=window.Plotly?Promise.resolve():new Promise(resolve=>{const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js";s.onload=resolve;s.onerror=resolve;document.head.appendChild(s)});
 let lastResult=null,lastPayload=null,mapObj=null;
 function setVal(id,v){if(v!==undefined&&v!==null&&$(id))$(id).value=v}
 function stageTimeline(stages){let t=0;return stages.map(s=>{const ign=t+Number(s.ignition_delay||0),cut=ign+Number(s.burn_time),sep=cut+2;t=sep;return {ignition_t:ign,cutoff_t:cut,separation_t:sep,burns:[{ignition_t:ign,cutoff_t:cut}]}})}
@@ -77,7 +78,7 @@ $("mission-form").addEventListener("submit",async ev=>{
  try{stages=JSON.parse($("stages").value);if(!Array.isArray(stages)||!stages.length||stages.length>5)throw Error("Stages ต้องเป็น JSON array จำนวน 1–5 สเตจ");if($("use_boost").checked){boostGroups=JSON.parse($("boost_groups").value||"[]");if(!Array.isArray(boostGroups)||!boostGroups.length||boostGroups.length>4)throw Error("Booster groups ต้องเป็น JSON array จำนวน 1–4 กลุ่ม")}if($("use_timeline").checked){const tStages=JSON.parse($("timeline_stages").value);if(!Array.isArray(tStages))throw Error("Timeline ต้องเป็น JSON array");timeline={stages:tStages,fairing_t:$("fairing_t").value===""?null:n("fairing_t"),payload_t:$("payload_t").value===""?null:n("payload_t")}}}catch(err){$("loading").classList.add("hidden");$("error").textContent="Input error: "+err.message;$("error").classList.remove("hidden");return}
  const launch=$("launch_utc").value;if(!launch){$("loading").classList.add("hidden");$("error").textContent="กรุณาระบุ Launch UTC";$("error").classList.remove("hidden");return}
  const p={stages,payload:n("payload"),fairing_mass:n("fairing_mass"),fairing_alt:n("fairing_alt"),site_lat:n("site_lat"),site_lon:n("site_lon"),site_alt:n("site_alt"),obs_lat:n("obs_lat"),obs_lon:n("obs_lon"),obs_alt:n("obs_alt"),target_alt:n("target_alt"),target_apogee_alt:n("target_apogee_alt"),launch_azimuth_deg:n("launch_azimuth_deg"),mission_type:$("mission_type").value,launch_utc:launch+":00Z",auto_profile:$("auto_profile").checked,vertical_time:n("vertical_time"),kick_angle:n("kick_angle"),kick_duration:n("kick_duration"),min_elevation:n("min_elevation"),timestep:n("timestep"),orbit_count:n("orbit_count"),use_boost:$("use_boost").checked,boost_groups:boostGroups,boost_throttle:n("boost_throttle"),solo_throttle:n("solo_throttle"),boost_auto_burn:$("boost_auto_burn").checked,use_timeline:$("use_timeline").checked,timeline};
- try{const r=await fetch("/api/simulate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});const d=await r.json();if(!r.ok)throw Error(d.detail||"API error");render(d,p)}catch(err){$("loading").classList.add("hidden");$("error").textContent="Simulation error: "+err.message;$("error").classList.remove("hidden")}
+ try{const r=await fetch("/api/simulate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});const d=await r.json();if(!r.ok)throw Error(d.detail||"API error");await plotlyReady;if(!window.Plotly)throw Error("โหลดไลบรารีกราฟไม่สำเร็จ กรุณาตรวจการเชื่อมต่ออินเทอร์เน็ตแล้วลองใหม่");render(d,p)}catch(err){$("loading").classList.add("hidden");$("error").textContent="Simulation error: "+err.message;$("error").classList.remove("hidden")}
 });
 
 
@@ -153,7 +154,7 @@ function loadDatabaseRocket() {
     boost_groups: boosters,
     use_boost: boosters.length > 0,
     payload: version.payload ?? version.payload_mass_kg ?? version.payload_mass ?? 0,
-    fairing_mass: version.fairing_mass ?? 0,
+    fairing_mass: version.fairing_mass_kg ?? version.fairing_mass ?? 0,
     fairing_alt: version.fairing_alt ?? version.fairing_jettison_alt_km ?? 110,
     target_alt: version.target_alt ?? 550,
     target_apogee_alt: version.target_apogee_alt ?? version.target_alt ?? 550,
