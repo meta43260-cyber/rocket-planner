@@ -11,3 +11,13 @@
 .export-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.export-grid button{width:100%;padding:12px}.elements{grid-template-columns:repeat(4,1fr)}
 @media(max-width:950px){.topbar nav{display:none}.charts{grid-template-columns:1fr}.elements{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:600px){.shell{padding:18px 12px}.toolbar{gap:5px}.soft-button{font-size:10px;padding:8px}.visibility #visibility{grid-template-columns:repeat(2,1fr)}.export-grid{grid-template-columns:repeat(2,1fr)}#alt-chart,#aero-chart,#flight-chart,#look-chart{height:250px}#sky-chart,#sun-chart{height:250px}.legend{gap:10px}.panel-head{gap:8px}}
+
+/* Focus the result UI on the two primary mission visuals. */
+.sky-view{border-top:1px solid #26384d;padding-top:18px;margin-top:18px}
+.sky-view-head h3{margin:5px 0 6px}
+#sky-chart{max-width:520px;margin:0 auto;min-height:180px}
+#map{min-height:260px}
+.telemetry-panel{margin:14px 0}
+.telemetry-panel .table-wrap{max-height:560px;overflow:auto}
+.telemetry-panel table{min-width:1050px}
+#look-table{min-width:680px}
