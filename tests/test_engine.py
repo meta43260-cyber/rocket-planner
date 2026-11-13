@@ -1,9 +1,12 @@
 from datetime import datetime, timezone
 import math
 
+import pandas as pd
+
 import rocket_planner as rp
 import booster as bst
-from main import clean, health, jd_from_datetime
+from main import (clean, health, jd_from_datetime, _visibility_trajectory,
+                  _sampled_visible_duration)
 
 
 def test_j2000_epoch_conversion():
@@ -127,3 +130,25 @@ def test_launch_plane_normal_matches_requested_compass_azimuth():
     assert abs(float(normal @ desired_horizontal)) < 1e-12
     assert abs(float(normal @ up)) < 1e-12
 
+
+
+def test_visibility_trajectory_includes_orbit_after_ascent():
+    ascent = pd.DataFrame([
+        {"t": 0.0, "x": 1.0, "y": 0.0, "z": 0.0, "alt_km": 0.0},
+        {"t": 1.0, "x": 2.0, "y": 0.0, "z": 0.0, "alt_km": 10.0},
+    ])
+    orbit = pd.DataFrame([
+        {"t": 20.0, "x": 3.0, "y": 0.0, "z": 0.0, "alt_km": 450.0},
+        {"t": 35.0, "x": 4.0, "y": 0.0, "z": 0.0, "alt_km": 450.0},
+    ])
+    combined = _visibility_trajectory(ascent, orbit)
+    assert combined["t"].tolist() == [0.0, 1.0, 20.0, 35.0]
+    assert combined.iloc[-1]["alt_km"] == 450.0
+
+
+def test_visible_duration_sums_only_contiguous_visible_samples():
+    look = pd.DataFrame({
+        "t": [0.0, 1.0, 2.0, 100.0, 101.0],
+        "el_deg": [10.0, 10.0, 0.0, 10.0, 10.0],
+    })
+    assert _sampled_visible_duration(look, 5.0) == 2.0
