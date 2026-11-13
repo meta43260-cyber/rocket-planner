@@ -24,35 +24,56 @@ function n(id){return Number($(id).value)}
 function safe(v,d=2){return v===null||v===undefined||!Number.isFinite(Number(v))?"—":Number(v).toFixed(d)}
 function metric(label,value,sub=""){return `<div class="metric"><span>${label}</span><strong>${value}</strong><small>${sub}</small></div>`}
 function csv(rows){if(!rows||!rows.length)return "";const keys=Object.keys(rows[0]);const q=x=>{if(x===null||x===undefined)return "";const s=String(x);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};return [keys.map(q).join(","),...rows.map(r=>keys.map(k=>q(r[k])).join(","))].join("\n")}
-function plotLayout(title){return {title:{text:title,font:{size:12,color:"#dce8f3"}},paper_bgcolor:"rgba(0,0,0,0)",plot_bgcolor:"rgba(0,0,0,0)",font:{color:"#aebfd0",family:"IBM Plex Sans Thai"},margin:{l:52,r:18,t:38,b:45},xaxis:{gridcolor:"#26384d",title:"T+ (s)"},yaxis:{gridcolor:"#26384d"},legend:{orientation:"h",y:1.13},autosize:true}}
-function lineTrace(rows,x,y,name){return {x:rows.map(r=>r[x]),y:rows.map(r=>r[y]),name,type:"scatter",mode:"lines",connectgaps:false}}
-function svgLineChart(id,series,options={}){
- const el=$(id);if(!el)return;const W=720,H=300,L=62,R=options.rightAxis?58:22,T=24,B=48;
- const xs=[],ys=[];
- series.forEach(s=>(Array.isArray(s.rows)?s.rows:[]).forEach(r=>{const x=Number(r[s.x]),y=Number(r[s.y]);if(Number.isFinite(x))xs.push(x);if(Number.isFinite(y))ys.push(y)}));
- if(!xs.length||!ys.length){el.innerHTML='<p class="hint">ไม่มีข้อมูลสำหรับกราฟ</p>';return}
- const xmin=Math.min.apply(null,xs),xmax=Math.max.apply(null,xs),span=Math.max(1e-9,xmax-xmin),left=series.filter(s=>s.axis!=="right"),right=series.filter(s=>s.axis==="right");
- const range=list=>{const v=[];list.forEach(s=>(Array.isArray(s.rows)?s.rows:[]).forEach(r=>{const y=Number(r[s.y]);if(Number.isFinite(y))v.push(y)}));if(!v.length)return [0,1];let lo=Math.min.apply(null,v),hi=Math.max.apply(null,v);if(lo===hi){lo-=1;hi+=1}return [lo-(hi-lo)*.08,hi+(hi-lo)*.08]};
- const yl=range(left.length?left:series),yr=right.length?range(right):null,pal=["#ff8b59","#53d5d0","#a78bfa","#f5c76b"];
- const X=x=>L+(Number(x)-xmin)/span*(W-L-R),Y=(v,r)=>H-B-(Number(v)-r[0])/(r[1]-r[0])*(H-T-B);let z='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block" role="img">';
- for(let i=0;i<=4;i++){let y=T+i*(H-T-B)/4;z+='<line x1="'+L+'" y1="'+y+'" x2="'+(W-R)+'" y2="'+y+'" stroke="#26384d"/><text x="'+(L-8)+'" y="'+(y+4)+'" fill="#9fb2c5" font-size="11" text-anchor="end">'+(yl[1]-i*(yl[1]-yl[0])/4).toFixed(1)+'</text>';if(yr)z+='<text x="'+(W-R+8)+'" y="'+(y+4)+'" fill="#9fb2c5" font-size="11">'+(yr[1]-i*(yr[1]-yr[0])/4).toFixed(1)+'</text>'}
- for(let i=0;i<=4;i++){let x=L+i*(W-L-R)/4;z+='<text x="'+x+'" y="'+(H-20)+'" fill="#9fb2c5" font-size="11" text-anchor="middle">'+(xmin+i*span/4).toFixed(0)+'</text>'}
- z+='<text x="'+((L+W-R)/2)+'" y="'+(H-3)+'" fill="#aebfd0" font-size="12" text-anchor="middle">T+ (s)</text>';
- series.forEach((s,i)=>{let d="",started=false,r=s.axis==="right"&&yr?yr:yl;s.rows.forEach(p=>{let x=Number(p[s.x]),y=Number(p[s.y]);if(!Number.isFinite(x)||!Number.isFinite(y)){started=false;return}d+=(started?" L":"M")+X(x).toFixed(1)+","+Y(y,r).toFixed(1);started=true});z+='<path d="'+d+'" fill="none" stroke="'+(s.color||pal[i%pal.length])+'" stroke-width="2.5"/>'});
- let lx=L;series.forEach((s,i)=>{z+='<line x1="'+lx+'" y1="'+(H-1)+'" x2="'+(lx+16)+'" y2="'+(H-1)+'" stroke="'+(s.color||pal[i%pal.length])+'" stroke-width="3"/><text x="'+(lx+21)+'" y="'+(H+1)+'" fill="#aebfd0" font-size="11">'+s.name+'</text>';lx+=Math.max(110,s.name.length*7+35)});el.innerHTML=z+'</svg>';
-}
-function renderChartSafely(id,fn){try{fn()}catch(err){const el=$(id);if(el)el.innerHTML='<p class="hint">กราฟนี้แสดงผลไม่ได้: '+String(err&&err.message||err).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))+'</p>';console.error("Chart render failed:",id,err)}}
 function svgSkyChart(id,rows,minEl){
- const el=$(id),v=rows.filter(r=>Number(r.el_deg)>Number(minEl));if(!el)return;if(!v.length){el.innerHTML='<p class="hint">ไม่มีช่วงที่ผ่าน elevation threshold</p>';return}
- const W=420,cx=210,cy=165,rad=132;let z='<svg viewBox="0 0 420 340" style="width:100%;height:auto;display:block">';
- [30,60,90].forEach(e=>{let r=rad*(90-e)/90;z+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#35485d"/><text x="'+(cx+5)+'" y="'+(cy-r+13)+'" fill="#9fb2c5" font-size="10">'+e+'°</text>'});
- [["N",0],["E",90],["S",180],["W",270]].forEach(([t,a])=>{let q=a*Math.PI/180;z+='<text x="'+(cx+Math.sin(q)*(rad+18))+'" y="'+(cy-Math.cos(q)*(rad+18)+4)+'" text-anchor="middle" fill="#dce8f3" font-size="12">'+t+'</text>'});
- let d="";v.forEach((p,i)=>{let a=Number(p.az_deg)*Math.PI/180,r=rad*(90-Number(p.el_deg))/90;d+=(i?" L":"M")+(cx+Math.sin(a)*r).toFixed(1)+","+(cy-Math.cos(a)*r).toFixed(1)});el.innerHTML=z+'<path d="'+d+'" fill="none" stroke="#ff8b59" stroke-width="3"/></svg>';
+ const el=$(id);if(!el)return;
+ const source=Array.isArray(rows)?rows:[];
+ const visible=source.filter(r=>Number.isFinite(Number(r.az_deg))&&Number.isFinite(Number(r.el_deg))&&Number(r.el_deg)>Number(minEl));
+ if(!visible.length){el.innerHTML='<p class="hint">ไม่มีช่วงที่ผ่านมุมเงยขั้นต่ำ</p>';return}
+ const maxPoints=1200,step=Math.max(1,Math.ceil(visible.length/maxPoints)),v=visible.filter((_,i)=>i%step===0||i===visible.length-1);
+ const W=420,cx=210,cy=170,rad=132;
+ let z='<svg viewBox="0 0 420 350" role="img" aria-label="แผนภาพทิศและมุมเงยของจรวด" style="width:100%;height:auto;display:block">';
+ [30,60,90].forEach(e=>{const r=rad*(90-e)/90;z+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#35485d"/><text x="'+(cx+6)+'" y="'+(cy-r+13)+'" fill="#9fb2c5" font-size="10">'+e+'°</text>'});
+ [["N",0],["E",90],["S",180],["W",270]].forEach(([t,a])=>{const q=a*Math.PI/180;z+='<text x="'+(cx+Math.sin(q)*(rad+18))+'" y="'+(cy-Math.cos(q)*(rad+18)+4)+'" text-anchor="middle" fill="#dce8f3" font-size="12">'+t+'</text>'});
+ let d='';v.forEach((p,i)=>{const a=Number(p.az_deg)*Math.PI/180,r=rad*(90-Number(p.el_deg))/90;d+=(i?' L':'M')+(cx+Math.sin(a)*r).toFixed(1)+','+(cy-Math.cos(a)*r).toFixed(1)});
+ const first=v[0],last=v[v.length-1],point=p=>{const a=Number(p.az_deg)*Math.PI/180,r=rad*(90-Number(p.el_deg))/90;return [cx+Math.sin(a)*r,cy-Math.cos(a)*r]};
+ const fp=point(first),lp=point(last);
+ z+='<path d="'+d+'" fill="none" stroke="#ff8b59" stroke-width="3" stroke-linejoin="round"/><circle cx="'+fp[0].toFixed(1)+'" cy="'+fp[1].toFixed(1)+'" r="4" fill="#53d5d0"/><circle cx="'+lp[0].toFixed(1)+'" cy="'+lp[1].toFixed(1)+'" r="4" fill="#ff8b59"/><text x="18" y="330" fill="#53d5d0" font-size="11">● เริ่มเห็น</text><text x="105" y="330" fill="#ff8b59" font-size="11">● สิ้นสุด</text></svg>';
+ el.innerHTML=z;
 }
 
 function splitTrack(points){const out=[];let seg=[];for(const p of points){if(seg.length&&Math.abs(p[1]-seg[seg.length-1][1])>180){if(seg.length>1)out.push(seg);seg=[]}seg.push(p)}if(seg.length>1)out.push(seg);return out}
-function drawMap(data,p){if(mapObj){mapObj.remove();mapObj=null}mapObj=L.map("map").setView([20,80],2);L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(mapObj);const asc=data.ascent.map(x=>[x.lat,x.lon]),orb=data.orbit.map(x=>[x.lat,x.lon]);splitTrack(asc).forEach(seg=>L.polyline(seg,{color:"#ff8b59",weight:3}).addTo(mapObj));splitTrack(orb).forEach(seg=>L.polyline(seg,{color:"#53d5d0",weight:2,dashArray:"6 5"}).addTo(mapObj));L.marker([p.site_lat,p.site_lon]).addTo(mapObj).bindPopup("Launch site");L.marker([p.obs_lat,p.obs_lon]).addTo(mapObj).bindPopup("Observer");const bounds=L.latLngBounds(asc.concat(orb));if(bounds.isValid())mapObj.fitBounds(bounds.pad(.1));setTimeout(()=>mapObj.invalidateSize(),150)}
-function tableRows(id,rows,cols){document.querySelector(id).innerHTML=rows.map(r=>"<tr>"+cols.map(c=>"<td>"+(typeof c==="function"?c(r):String(r[c]??"—"))+"</td>").join("")+"</tr>").join("")}
+function drawMap(data,p){
+ const el=$("map");if(!el)return;
+ try{
+  if(mapObj){mapObj.remove();mapObj=null}
+  if(!window.L||typeof L.map!=="function"){el.innerHTML='<p class="hint">แผนที่โหลดไม่สำเร็จ แต่ข้อมูลเส้นทางยังอยู่ในตารางและไฟล์ส่งออก</p>';return}
+  const ascent=Array.isArray(data.ascent)?data.ascent:[],orbit=Array.isArray(data.orbit)?data.orbit:[];
+  const asc=ascent.filter(x=>Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lon))).map(x=>[Number(x.lat),Number(x.lon)]);
+  const orb=orbit.filter(x=>Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lon))).map(x=>[Number(x.lat),Number(x.lon)]);
+  if(!asc.length&&!orb.length){el.innerHTML='<p class="hint">ไม่มีพิกัดเส้นทางสำหรับแสดงแผนที่</p>';return}
+  mapObj=L.map(el).setView([20,80],2);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap",maxZoom:18}).addTo(mapObj);
+  splitTrack(asc).forEach(seg=>L.polyline(seg,{color:"#ff8b59",weight:3}).addTo(mapObj));
+  splitTrack(orb).forEach(seg=>L.polyline(seg,{color:"#53d5d0",weight:2,dashArray:"6 5"}).addTo(mapObj));
+  if(Number.isFinite(Number(p.site_lat))&&Number.isFinite(Number(p.site_lon)))L.marker([p.site_lat,p.site_lon]).addTo(mapObj).bindPopup("Launch site");
+  if(Number.isFinite(Number(p.obs_lat))&&Number.isFinite(Number(p.obs_lon)))L.marker([p.obs_lat,p.obs_lon]).addTo(mapObj).bindPopup("Observer");
+  const bounds=L.latLngBounds(asc.concat(orb));if(bounds.isValid())mapObj.fitBounds(bounds.pad(.1));
+  requestAnimationFrame(()=>mapObj&&mapObj.invalidateSize());
+ }catch(err){console.error("Ground track render failed",err);if(mapObj){try{mapObj.remove()}catch(_){}mapObj=null}el.innerHTML='<p class="hint">แสดงแผนที่ไม่สำเร็จ: '+escapeHtml(err.message||String(err))+'</p>'}
+}
+function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function tableRows(id,rows,cols){
+ const target=document.querySelector(id);if(!target)return;
+ const data=Array.isArray(rows)?rows:[];
+ target.innerHTML=data.map(r=>"<tr>"+cols.map(c=>"<td>"+escapeHtml(typeof c==="function"?c(r):r[c])+"</td>").join("")+"</tr>").join("");
+}
+function sampleRows(rows,interval=10){
+ if(!Array.isArray(rows)||!rows.length)return [];
+ const out=[];let bucket=-1;
+ rows.forEach(r=>{const t=Number(r.t);if(!Number.isFinite(t))return;const b=Math.floor(t/interval);if(b!==bucket){out.push(r);bucket=b}});
+ if(out[out.length-1]!==rows[rows.length-1])out.push(rows[rows.length-1]);
+ return out;
+}
 function render(data,p){
  lastResult=data;lastPayload=p;$("welcome").classList.add("hidden");$("loading").classList.add("hidden");$("error").classList.add("hidden");$("output").classList.remove("hidden");
  const s=data.summary,e=data.elements,v=data.visibility;
@@ -73,12 +94,14 @@ function render(data,p){
  drawMap(data,p);
  tableRows("events-table tbody",data.events||[],[r=>r.event,r=>safe(r.t,1),r=>safe(r.alt_km,1),r=>safe(r.velocity_mps,0)]);
  const bp=$("boost-panel");if(data.boost_log?.length){bp.classList.remove("hidden");tableRows("boost-table tbody",data.boost_log,[r=>safe(r.t0,1)+"–"+safe(r.t1,1),r=>r.name,r=>safe(r.F_sl,0)+" kN",r=>safe(r.isp_vac,1),r=>safe(r.prop/1000,2)+" t",r=>safe(r.jett/1000,2)+" t"])}else bp.classList.add("hidden");
- const a=data.ascent,l=data.look;
-  renderChartSafely("alt-chart",()=>svgLineChart("alt-chart",[{rows:a,x:"t",y:"alt_km",name:"Altitude (km)"},{rows:a,x:"t",y:"v_relative",name:"Velocity (m/s)",axis:"right"}],{rightAxis:true}));
-  renderChartSafely("aero-chart",()=>svgLineChart("aero-chart",[{rows:a,x:"t",y:"q_kPa",name:"Dynamic pressure (kPa)"},{rows:a,x:"t",y:"mach",name:"Mach",axis:"right"}],{rightAxis:true}));
-  renderChartSafely("flight-chart",()=>svgLineChart("flight-chart",[{rows:a,x:"t",y:"fpa_deg",name:"Flight path angle (°)"},{rows:a,x:"t",y:"acc_g",name:"Acceleration (g)",axis:"right"}],{rightAxis:true}));
-  renderChartSafely("look-chart",()=>svgLineChart("look-chart",[{rows:l,x:"t",y:"el_deg",name:"Elevation (°)"},{rows:l,x:"t",y:"az_deg",name:"Azimuth (°)",axis:"right"}],{rightAxis:true}));
-  const vis=l.filter(x=>x.el_deg>p.min_elevation);
+ const a=Array.isArray(data.ascent)?data.ascent:[],l=Array.isArray(data.look)?data.look:[];
+ const ascentSamples=sampleRows(a,10);
+ tableRows("ascent-table tbody",ascentSamples,[
+  r=>safe(r.t,1),r=>safe(r.alt_km,2),r=>safe(r.v_relative,0),r=>safe(r.mach,2),
+  r=>safe(r.q_kPa,2),r=>safe(r.fpa_deg,2),r=>safe(r.acc_g,2),
+  r=>safe(r.mass,0),r=>safe(r.thrust_kN,0),r=>r.stage||"—"
+ ]);
+ const vis=l.filter(x=>x.el_deg>p.min_elevation);
  const cards=[["FIRST VISIBLE",v.first?.t!==undefined?"T+"+safe(v.first.t,1)+" s":"—"],["PEAK ELEVATION",v.peak?safe(v.peak.el_deg,1)+"°":"—"],["CLOSEST RANGE",v.closest?safe(v.closest.range_km,1)+" km":"—"],["LAST VISIBLE",v.last?.t!==undefined?"T+"+safe(v.last.t,1)+" s":"—"],["SUNLIT WHILE VISIBLE",safe(s.sunlit_percent,0)+"%"],["TWILIGHT PHOTO WINDOW",safe(s.photo_window_percent,0)+"%"]];
  $("visibility").innerHTML=cards.map(([k,x])=>`<div class="vis-item"><span>${k}</span><b>${x}</b></div>`).join("");
  $("report").textContent=data.report;
