@@ -190,6 +190,14 @@ def enu_basis(r_eci):
     n = np.cross(up, e)
     return e, n, up
 
+def launch_plane_normal(r_eci, azimuth_deg):
+    """Inertial normal of the plane defined by the launch-site compass azimuth."""
+    e, n, up = enu_basis(r_eci)
+    az = float(azimuth_deg) * D2R
+    horizontal = np.sin(az) * e + np.cos(az) * n
+    normal = np.cross(up, horizontal)
+    return normal / max(np.linalg.norm(normal), 1e-12)
+
 def sun_unit_eci(jd: float):
     n = jd - 2451545.0
     L = np.radians((280.460 + 0.9856474 * n) % 360.0)
@@ -267,10 +275,9 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
     # The plane is fixed in inertial space; the local compass bearing naturally
     # changes along a great-circle ground track, but the vehicle must not yaw
     # out of this plane after the initial pitch-over.
+    plane_normal = launch_plane_normal(r, az_r)
     e0, n0, up0 = enu_basis(r)
     launch_horizontal = np.sin(az) * e0 + np.cos(az) * n0
-    plane_normal = np.cross(up0, launch_horizontal)
-    plane_normal /= max(np.linalg.norm(plane_normal), 1e-12)
 
     stages = vehicle.stages
     prop_left = [sg.prop_mass for sg in stages]
