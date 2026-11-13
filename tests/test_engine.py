@@ -114,3 +114,16 @@ def test_missing_stage_thrust_curve_is_normalized_to_none():
     assert _curve_points(None) is None
     assert _curve_points([]) is None
     assert _curve_points([[0, 1000], [10, 800]]) == [(0.0, 1000.0), (10.0, 800.0)]
+
+
+def test_launch_plane_normal_matches_requested_compass_azimuth():
+    r = rp.geodetic_to_ecef(5.2, -52.8, 0.0)
+    theta = rp.gmst(2460000.5)
+    c, s = math.cos(theta), math.sin(theta)
+    r_eci = [c * r[0] - s * r[1], s * r[0] + c * r[1], r[2]]
+    normal = rp.launch_plane_normal(r_eci, 39.0)
+    e, n, up = rp.enu_basis(r_eci)
+    desired_horizontal = math.sin(math.radians(39.0)) * e + math.cos(math.radians(39.0)) * n
+    assert abs(float(normal @ desired_horizontal)) < 1e-12
+    assert abs(float(normal @ up)) < 1e-12
+
