@@ -8,6 +8,7 @@ from pathlib import Path
 import math
 
 import numpy as np
+import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -154,6 +155,27 @@ def records(df, columns=None, stride=1):
 def _curve_points(value):
     """Normalize an optional thrust curve from API input for the engine."""
     return [(float(point[0]), float(point[1])) for point in (value or [])] or None
+
+
+def _visibility_trajectory(ascent, orbit):
+    """Join ascent and propagated orbit states on the same launch-relative time axis."""
+    frames = [frame for frame in (ascent, orbit) if frame is not None and not frame.empty]
+    if not frames:
+        return pd.DataFrame()
+    return (pd.concat(frames, ignore_index=True)
+            .sort_values("t")
+            .drop_duplicates(subset=["t"], keep="last")
+            .reset_index(drop=True))
+
+
+def _sampled_visible_duration(look, min_elevation):
+    """Sum adjacent sampled intervals that are both above the visibility threshold."""
+    if look is None or len(look) < 2:
+        return 0.0
+    times = look["t"].to_numpy(dtype=float)
+    visible = look["el_deg"].to_numpy(dtype=float) > float(min_elevation)
+    intervals = np.diff(times)
+    return float(intervals[visible[:-1] & visible[1:]].sum())
 
 
 def event_rows(ascent, fairing_t=None, payload_t=None, fairing_alt=110,
@@ -386,9 +408,13 @@ def simulate(data: SimulationInput):
         else:
             duration = data.orbit_count * elements["period_min"] * 60.0
         orbit = rp.propagate_orbit(orbit_state, t_insert, theta0, duration=duration, dt=15)
-        look = rp.look_angles(ascent, data.obs_lat, data.obs_lon, data.obs_alt,
-                              launch_jd, theta0)
+        # Visibility must cover the powered ascent AND the propagated orbital
+        # ground track. The map displays both; previously only ascent was tested.
+        visibility_trajectory = _visibility_trajectory(ascent, orbit)
+        look = rp.look_angles(visibility_trajectory, data.obs_lat, data.obs_lon,
+                              data.obs_alt, launch_jd, theta0)
         visible = look[look["el_deg"] > data.min_elevation]
+        visible_duration_s = _sampled_visible_duration(look, data.min_elevation)
         first = visible.iloc[0].to_dict() if not visible.empty else None
         peak = visible.loc[visible["el_deg"].idxmax()].to_dict() if not visible.empty else None
         closest = visible.loc[visible["range_km"].idxmin()].to_dict() if not visible.empty else None
@@ -402,7 +428,7 @@ def simulate(data: SimulationInput):
             "max_g": float(ascent["acc_g"].max()),
             "azimuth_rotating_deg": azimuth[0], "azimuth_inertial_deg": azimuth[1],
             "earth_rotation_bonus_mps": azimuth[2], "delta_v_mps": delta_v,
-            "visible_duration_s": float(last["t"] - first["t"]) if first and last else 0.0,
+            "visible_duration_s": visible_duration_s,
             "sunlit_percent": float(visible["rocket_sunlit"].mean() * 100) if not visible.empty else 0.0,
             "photo_window_percent": float(visible["photo_window"].mean() * 100) if not visible.empty else 0.0,
             "visible_count": int(len(visible)),
