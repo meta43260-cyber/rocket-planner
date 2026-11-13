@@ -41,6 +41,10 @@ function svgSkyChart(id,rows,minEl){
  el.innerHTML=z;
 }
 
+function renderSkySafely(rows,minEl){
+ try{svgSkyChart("sky-chart",rows,minEl)}
+ catch(err){const el=$("sky-chart");if(el)el.innerHTML='<p class="hint">แผนภาพท้องฟ้าแสดงผลไม่ได้: '+escapeHtml(err.message||String(err))+'</p>';console.error("Sky view render failed",err)}
+}
 function splitTrack(points){const out=[];let seg=[];for(const p of points){if(seg.length&&Math.abs(p[1]-seg[seg.length-1][1])>180){if(seg.length>1)out.push(seg);seg=[]}seg.push(p)}if(seg.length>1)out.push(seg);return out}
 function drawMap(data,p){
  const el=$("map");if(!el)return;
@@ -105,8 +109,8 @@ function render(data,p){
  const cards=[["FIRST VISIBLE",v.first?.t!==undefined?"T+"+safe(v.first.t,1)+" s":"—"],["PEAK ELEVATION",v.peak?safe(v.peak.el_deg,1)+"°":"—"],["CLOSEST RANGE",v.closest?safe(v.closest.range_km,1)+" km":"—"],["LAST VISIBLE",v.last?.t!==undefined?"T+"+safe(v.last.t,1)+" s":"—"],["SUNLIT WHILE VISIBLE",safe(s.sunlit_percent,0)+"%"],["TWILIGHT PHOTO WINDOW",safe(s.photo_window_percent,0)+"%"]];
  $("visibility").innerHTML=cards.map(([k,x])=>`<div class="vis-item"><span>${k}</span><b>${x}</b></div>`).join("");
  $("report").textContent=data.report;
- renderChartSafely("sky-chart",()=>svgSkyChart("sky-chart",l,p.min_elevation));
-  renderChartSafely("sun-chart",()=>svgLineChart("sun-chart",[{rows:l,x:"t",y:"sun_el_deg",name:"Sun elevation"},{rows:l,x:"t",y:"el_deg",name:"Rocket elevation"}]));
+  renderSkySafely(l,p.min_elevation);
+
   const table=vis.filter(x=>Math.abs((x.t/10)-Math.round(x.t/10))<.035);tableRows("look-table tbody",table,[r=>safe(r.t,1),r=>safe(r.az_deg,2),r=>safe(r.el_deg,2),r=>safe(r.range_km,2),r=>safe(r.alt_km,2),r=>safe(r.angular_rate,3)]);
  const entries=[["Semi-major axis",e.a_km,"km"],["Eccentricity",e.e,""],["Inclination",e.inc_deg,"°"],["RAAN",e.raan_deg,"°"],["Argument of periapsis",e.argp_deg,"°"],["True anomaly",e.ta_deg,"°"],["Orbital period",e.period_min,"min"],["Earth rotation bonus",s.earth_rotation_bonus_mps,"m/s"]];
  $("elements").innerHTML=entries.map(([k,x,u])=>`<div class="element"><span>${k}</span><b>${x===null?"—":safe(x,2)+u}</b></div>`).join("");
