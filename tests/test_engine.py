@@ -105,3 +105,12 @@ def test_booster_thrust_curve_is_preserved_in_virtual_phases():
     assert len(phases) >= 3
     assert all(len(phase["thrust_curve"]) == 2 for phase in phases)
     assert phases[0]["thrust_curve"][0][1] > phases[-2]["thrust_curve"][-1][1]
+
+
+
+def test_missing_stage_thrust_curve_is_normalized_to_none():
+    from main import _curve_points
+
+    assert _curve_points(None) is None
+    assert _curve_points([]) is None
+    assert _curve_points([[0, 1000], [10, 800]]) == [(0.0, 1000.0), (10.0, 800.0)]
