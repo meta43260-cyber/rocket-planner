@@ -62,9 +62,45 @@ const dbFields={
 };
 function dbVal(id){return $(id).value.trim()}
 function dbNum(id){const v=dbVal(id);return v===""?null:Number(v)}
+function curvePointsFromEditor(box){
+ const points=[...box.querySelectorAll("[data-curve-row]")].map(tr=>[
+  Number(tr.querySelector("[data-curve-time]").value),
+  Number(tr.querySelector("[data-curve-thrust]").value)
+ ]);
+ return points;
+}
+function curveRefresh(box){
+ const points=curvePointsFromEditor(box),hidden=box.querySelector("[data-db-field=thrust_curve_json]");
+ hidden.value=points.every(p=>Number.isFinite(p[0])&&Number.isFinite(p[1])&&p[0]>=0&&p[1]>0)?JSON.stringify(points):"";
+ const svg=box.querySelector("[data-curve-chart]"),w=520,h=170,pad=30;
+ if(!points.length){svg.innerHTML='<text x="260" y="85" text-anchor="middle" fill="#9eb1c4" font-size="13">เพิ่มจุดข้อมูลเพื่อแสดงกราฟ</text>';return}
+ const maxT=Math.max(1,...points.map(p=>p[0])),maxF=Math.max(1,...points.map(p=>p[1]));
+ const xy=points.map(([t,f])=>[pad+t/maxT*(w-pad*2),h-pad-f/maxF*(h-pad*2)]);
+ const path=xy.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+ svg.innerHTML='<path d="M'+pad+' '+(h-pad)+' H'+(w-pad)+' M'+pad+' '+pad+' V'+(h-pad)+'" stroke="#557087" fill="none"/><path d="'+path+'" stroke="#52d6d0" stroke-width="3" fill="none" stroke-linejoin="round"/>'+xy.map(p=>'<circle cx="'+p[0]+'" cy="'+p[1]+'" r="4" fill="#52d6d0"/>').join("")+'<g fill="#9eb1c4" font-size="10"><text x="'+pad+'" y="'+(h-7)+'">0 s</text><text x="'+(w-pad)+'" y="'+(h-7)+'" text-anchor="end">'+maxT+' s</text><text x="4" y="12">'+maxF.toLocaleString()+' kN</text></g>';
+}
+function setupCurveEditor(box,initial){
+ const body=box.querySelector("[data-curve-rows]");
+ const add=(point=[0,1000])=>{
+  const tr=document.createElement("tr");tr.setAttribute("data-curve-row","");
+  tr.innerHTML='<td><input data-curve-time type="number" min="0" step="any" value="'+esc(point[0])+'"></td><td><input data-curve-thrust type="number" min="0.000001" step="any" value="'+esc(point[1])+'"></td><td><button type="button" class="curve-remove" data-curve-remove title="ลบจุดนี้">ลบ</button></td>';
+  body.appendChild(tr);
+ };
+ (Array.isArray(initial)?initial:[]).forEach(add);
+ box.querySelector("[data-curve-add]").addEventListener("click",()=>{
+  const pts=curvePointsFromEditor(box),last=pts[pts.length-1]||[0,1000];add([last[0]+10,last[1]]);curveRefresh(box);
+ });
+ body.addEventListener("input",()=>curveRefresh(box));
+ body.addEventListener("click",e=>{if(e.target.closest("[data-curve-remove]")){e.target.closest("tr").remove();curveRefresh(box)}});
+ body.querySelectorAll(".curve-remove").forEach(b=>b.setAttribute("data-curve-remove",""));
+ curveRefresh(box);
+}
 function fillDbChildFields(row={}){
  const kind=$("db-child-type").value;
- $("db-child-fields").innerHTML=((kind==="rocket_stages"?'<p class="note" style="grid-column:1/-1">Stage 1 ต้องมี Thrust SL เพื่อคำนวณ TWR ตอนเริ่มบิน ส่วน ISP SL เว้นได้แต่จะใช้ ISP vacuum เป็นค่าประมาณในบรรยากาศ; Thrust-Time Curve ใช้ JSON [[เวลาเผาไหม้สะสม (s), Thrust vacuum (kN)], ...]</p>':kind==="rocket_boosters"?'<p class="note" style="grid-column:1/-1">Booster: Thrust SL และ ISP SL เว้นได้แยกกัน แต่ค่าที่ขาดจะใช้ Vacuum เป็นค่าประมาณ; Thrust-Time Curve กรอกเป็น JSON [[เวลาเผาไหม้สะสม (s), Thrust vacuum (kN)], ...] โดยใช้ข้อมูลอ้างอิงจริงเท่านั้น</p>':""))+dbFields[kind].map(([key,label,type])=>type==="json"?'<label style="grid-column:1/-1">'+esc(label)+'<textarea data-db-field="'+key+'" rows="5" placeholder="[[0,4775],[20,4500],[60,3900]]">'+esc(row[key]?JSON.stringify(row[key]):"")+'</textarea></label>':'<label>'+esc(label)+'<input data-db-field="'+key+'" type="'+type+'" value="'+esc(row[key]??"")+'" '+(key==="source_url"?'placeholder="https://..."':((kind==="rocket_stages"||kind==="rocket_boosters")&&(key==="thrust_sl_kn"||key==="isp_sl_s")?'placeholder="เว้นว่างได้"':""))+'></label>').join("");
+ const notes=kind==="rocket_stages"?'<p class="note" style="grid-column:1/-1">Stage 1 ต้องมี Thrust SL เพื่อคำนวณ TWR ตอนเริ่มบิน ส่วน ISP SL เว้นได้และจะใช้ ISP vacuum เป็นค่าประมาณในบรรยากาศ</p>':kind==="rocket_boosters"?'<p class="note" style="grid-column:1/-1">Booster: Thrust SL และ ISP SL เว้นได้แยกกัน; ค่าที่ขาดจะใช้ Vacuum เป็นค่าประมาณ</p>':"";
+ $("db-child-fields").innerHTML=notes+dbFields[kind].map(([key,label,type])=>type==="json"?'<section class="curve-editor" style="grid-column:1/-1"><div class="curve-head"><strong>Thrust-Time Curve</strong><span>เวลาเผาไหม้สะสม (s) · Thrust vacuum (kN)</span></div><input type="hidden" data-db-field="'+key+'"><div class="table-wrap"><table class="curve-table"><thead><tr><th>เวลา (s)</th><th>แรงขับ (kN)</th><th></th></tr></thead><tbody data-curve-rows></tbody></table></div><div class="admin-actions"><button type="button" class="curve-add" data-curve-add>＋ เพิ่มจุดข้อมูล</button></div><p class="note">เพิ่มจุดตามลำดับเวลา ระบบจะเชื่อมจุดด้วย Linear Interpolation และสร้าง JSON ให้อัตโนมัติ ไม่ต้องเขียนโค้ดเอง ค่าแรงขับต้องมากกว่า 0; การหยุดเครื่องยนต์กำหนดจาก Burn time / Mission Timeline</p><svg data-curve-chart viewBox="0 0 520 170" role="img" aria-label="กราฟแรงขับตามเวลา"></svg></section>':'<label>'+esc(label)+'<input data-db-field="'+key+'" type="'+type+'" value="'+esc(row[key]??"")+'" '+(key==="source_url"?'placeholder="https://..."':((kind==="rocket_stages"||kind==="rocket_boosters")&&(key==="thrust_sl_kn"||key==="isp_sl_s")?'placeholder="เว้นว่างได้"':""))+'></label>').join("");
+ const curveBox=$("db-child-fields").querySelector(".curve-editor");
+ if(curveBox)setupCurveEditor(curveBox,row.thrust_curve_json||[]);
 }
 function fillDbChildSelect(){
  const kind=$("db-child-type").value,vid=$("db-child-version").value;
@@ -141,7 +177,13 @@ $("db-save-child").addEventListener("click",async()=>{
  try{
   const vid=dbVal("db-child-version"),kind=$("db-child-type").value,id=dbVal("db-child-select");
   if(!vid)throw Error("ยังไม่มี Draft Revision · กรุณาสร้างหรือเลือก Draft ก่อน");
+  const curveBox=$("db-child-fields").querySelector(".curve-editor");
+  if(curveBox){
+   const points=curvePointsFromEditor(curveBox);
+   if(points.length&& (points.length<2||points[0][0]!==0||points.some((p,i)=>!Number.isFinite(p[0])||!Number.isFinite(p[1])||p[0]<0||p[1]<=0||(i>0&&p[0]<=points[i-1][0]))))throw Error("Thrust-Time Curve ต้องมีอย่างน้อย 2 จุด เริ่มที่ 0 วินาที ใช้แรงขับมากกว่า 0 และเวลาเพิ่มขึ้นทุกจุด");
+  }
   const payload={};$("db-child-fields").querySelectorAll("[data-db-field]").forEach(el=>{const v=el.value.trim();if(v!=="")payload[el.dataset.dbField]=el.dataset.dbField==="thrust_curve_json"?JSON.parse(v):(el.type==="number"?Number(v):v)});
+  if(curveBox)payload.thrust_curve_json=points.length?points:null;
   if(kind==="rocket_stages"){
    for(const key of ["thrust_sl_kn","isp_sl_s"])if(!(key in payload))payload[key]=null;
    if(!payload.stage_number)throw Error("กรอกลำดับ Stage");
