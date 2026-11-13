@@ -46,24 +46,40 @@ function renderSkySafely(rows,minEl){
  catch(err){const el=$("sky-chart");if(el)el.innerHTML='<p class="hint">แผนภาพท้องฟ้าแสดงผลไม่ได้: '+escapeHtml(err.message||String(err))+'</p>';console.error("Sky view render failed",err)}
 }
 function splitTrack(points){const out=[];let seg=[];for(const p of points){if(seg.length&&Math.abs(p[1]-seg[seg.length-1][1])>180){if(seg.length>1)out.push(seg);seg=[]}seg.push(p)}if(seg.length>1)out.push(seg);return out}
+function renderGroundTrackFallback(el,asc,orb,p){
+ const W=960,H=480,project=pt=>[(Number(pt[1])+180)/360*W,(90-Math.max(-90,Math.min(90,Number(pt[0]))))/180*H];
+ const path=points=>splitTrack(points).map(seg=>seg.map((pt,i)=>{const q=project(pt);return (i?"L":"M")+q[0].toFixed(1)+","+q[1].toFixed(1)}).join(" ")).join(" ");
+ let grid="";
+ for(let lon=-180;lon<=180;lon+=30){const x=(lon+180)/360*W;grid+='<line x1="'+x+'" y1="0" x2="'+x+'" y2="'+H+'" stroke="#26384d"/><text x="'+x+'" y="18" fill="#9fb2c5" font-size="12" text-anchor="middle">'+lon+'°</text>'}
+ for(let lat=-60;lat<=60;lat+=30){const y=(90-lat)/180*H;grid+='<line x1="0" y1="'+y+'" x2="'+W+'" y2="'+y+'" stroke="#26384d"/><text x="8" y="'+(y-5)+'" fill="#9fb2c5" font-size="12">'+lat+'°</text>'}
+ const launch=project([p.site_lat,p.site_lon]),observer=project([p.obs_lat,p.obs_lon]);
+ el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Ground track on latitude longitude grid" style="width:100%;height:100%;min-height:260px;display:block;background:#091523">'+grid+
+ '<path d="'+path(asc)+'" fill="none" stroke="#ff8b59" stroke-width="3" stroke-linejoin="round"/>'+
+ '<path d="'+path(orb)+'" fill="none" stroke="#53d5d0" stroke-width="2.5" stroke-dasharray="7 5" stroke-linejoin="round"/>'+
+ '<circle cx="'+launch[0]+'" cy="'+launch[1]+'" r="6" fill="#f5c76b"/><circle cx="'+observer[0]+'" cy="'+observer[1]+'" r="6" fill="#ffffff"/>'+
+ '<text x="18" y="'+(H-18)+'" fill="#9fb2c5" font-size="13">แผนที่สำรองแบบพิกัดละติจูด/ลองจิจูด · เมื่อแผนที่ออนไลน์ไม่พร้อมใช้งาน</text></svg>';
+}
 function drawMap(data,p){
  const el=$("map");if(!el)return;
+ const ascent=Array.isArray(data.ascent)?data.ascent:[],orbit=Array.isArray(data.orbit)?data.orbit:[];
+ const asc=ascent.filter(x=>Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lon))).map(x=>[Number(x.lat),Number(x.lon)]);
+ const orb=orbit.filter(x=>Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lon))).map(x=>[Number(x.lat),Number(x.lon)]);
+ if(!asc.length&&!orb.length){el.innerHTML='<p class="hint">ไม่มีพิกัดเส้นทางสำหรับแสดงแผนที่</p>';return}
  try{
   if(mapObj){mapObj.remove();mapObj=null}
-  if(!window.L||typeof L.map!=="function"){el.innerHTML='<p class="hint">แผนที่โหลดไม่สำเร็จ แต่ข้อมูลเส้นทางยังอยู่ในตารางและไฟล์ส่งออก</p>';return}
-  const ascent=Array.isArray(data.ascent)?data.ascent:[],orbit=Array.isArray(data.orbit)?data.orbit:[];
-  const asc=ascent.filter(x=>Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lon))).map(x=>[Number(x.lat),Number(x.lon)]);
-  const orb=orbit.filter(x=>Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lon))).map(x=>[Number(x.lat),Number(x.lon)]);
-  if(!asc.length&&!orb.length){el.innerHTML='<p class="hint">ไม่มีพิกัดเส้นทางสำหรับแสดงแผนที่</p>';return}
+  if(!window.L||typeof L.map!=="function"){renderGroundTrackFallback(el,asc,orb,p);return}
   mapObj=L.map(el).setView([20,80],2);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap",maxZoom:18}).addTo(mapObj);
+  const tiles=L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap",maxZoom:18});
+  let tileErrors=0;
+  tiles.on("tileerror",()=>{tileErrors++;if(tileErrors>=3&&mapObj){try{mapObj.remove()}catch(_){}mapObj=null;renderGroundTrackFallback(el,asc,orb,p)}});
+  tiles.addTo(mapObj);
   splitTrack(asc).forEach(seg=>L.polyline(seg,{color:"#ff8b59",weight:3}).addTo(mapObj));
   splitTrack(orb).forEach(seg=>L.polyline(seg,{color:"#53d5d0",weight:2,dashArray:"6 5"}).addTo(mapObj));
   if(Number.isFinite(Number(p.site_lat))&&Number.isFinite(Number(p.site_lon)))L.marker([p.site_lat,p.site_lon]).addTo(mapObj).bindPopup("Launch site");
   if(Number.isFinite(Number(p.obs_lat))&&Number.isFinite(Number(p.obs_lon)))L.marker([p.obs_lat,p.obs_lon]).addTo(mapObj).bindPopup("Observer");
   const bounds=L.latLngBounds(asc.concat(orb));if(bounds.isValid())mapObj.fitBounds(bounds.pad(.1));
   requestAnimationFrame(()=>mapObj&&mapObj.invalidateSize());
- }catch(err){console.error("Ground track render failed",err);if(mapObj){try{mapObj.remove()}catch(_){}mapObj=null}el.innerHTML='<p class="hint">แสดงแผนที่ไม่สำเร็จ: '+escapeHtml(err.message||String(err))+'</p>'}
+ }catch(err){console.error("Ground track render failed",err);if(mapObj){try{mapObj.remove()}catch(_){}mapObj=null}renderGroundTrackFallback(el,asc,orb,p)}
 }
 function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function tableRows(id,rows,cols){
