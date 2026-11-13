@@ -28,10 +28,11 @@ function plotLayout(title){return {title:{text:title,font:{size:12,color:"#dce8f
 function lineTrace(rows,x,y,name){return {x:rows.map(r=>r[x]),y:rows.map(r=>r[y]),name,type:"scatter",mode:"lines",connectgaps:false}}
 function svgLineChart(id,series,options={}){
  const el=$(id);if(!el)return;const W=720,H=300,L=62,R=options.rightAxis?58:22,T=24,B=48;
- const xs=series.flatMap(s=>s.rows.map(r=>Number(r[s.x])).filter(Number.isFinite)),ys=series.flatMap(s=>s.rows.map(r=>Number(r[s.y])).filter(Number.isFinite));
+ const xs=[],ys=[];
+ series.forEach(s=>(Array.isArray(s.rows)?s.rows:[]).forEach(r=>{const x=Number(r[s.x]),y=Number(r[s.y]);if(Number.isFinite(x))xs.push(x);if(Number.isFinite(y))ys.push(y)}));
  if(!xs.length||!ys.length){el.innerHTML='<p class="hint">ไม่มีข้อมูลสำหรับกราฟ</p>';return}
- const xmin=Math.min(...xs),xmax=Math.max(...xs),span=Math.max(1e-9,xmax-xmin),left=series.filter(s=>s.axis!=="right"),right=series.filter(s=>s.axis==="right");
- const range=list=>{const v=list.flatMap(s=>s.rows.map(r=>Number(r[s.y])).filter(Number.isFinite));let lo=Math.min(...v),hi=Math.max(...v);if(lo===hi){lo-=1;hi+=1}return [lo-(hi-lo)*.08,hi+(hi-lo)*.08]};
+ const xmin=Math.min.apply(null,xs),xmax=Math.max.apply(null,xs),span=Math.max(1e-9,xmax-xmin),left=series.filter(s=>s.axis!=="right"),right=series.filter(s=>s.axis==="right");
+ const range=list=>{const v=[];list.forEach(s=>(Array.isArray(s.rows)?s.rows:[]).forEach(r=>{const y=Number(r[s.y]);if(Number.isFinite(y))v.push(y)}));if(!v.length)return [0,1];let lo=Math.min.apply(null,v),hi=Math.max.apply(null,v);if(lo===hi){lo-=1;hi+=1}return [lo-(hi-lo)*.08,hi+(hi-lo)*.08]};
  const yl=range(left.length?left:series),yr=right.length?range(right):null,pal=["#ff8b59","#53d5d0","#a78bfa","#f5c76b"];
  const X=x=>L+(Number(x)-xmin)/span*(W-L-R),Y=(v,r)=>H-B-(Number(v)-r[0])/(r[1]-r[0])*(H-T-B);let z='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block" role="img">';
  for(let i=0;i<=4;i++){let y=T+i*(H-T-B)/4;z+='<line x1="'+L+'" y1="'+y+'" x2="'+(W-R)+'" y2="'+y+'" stroke="#26384d"/><text x="'+(L-8)+'" y="'+(y+4)+'" fill="#9fb2c5" font-size="11" text-anchor="end">'+(yl[1]-i*(yl[1]-yl[0])/4).toFixed(1)+'</text>';if(yr)z+='<text x="'+(W-R+8)+'" y="'+(y+4)+'" fill="#9fb2c5" font-size="11">'+(yr[1]-i*(yr[1]-yr[0])/4).toFixed(1)+'</text>'}
@@ -73,7 +74,7 @@ function render(data,p){
  const bp=$("boost-panel");if(data.boost_log?.length){bp.classList.remove("hidden");tableRows("boost-table tbody",data.boost_log,[r=>safe(r.t0,1)+"–"+safe(r.t1,1),r=>r.name,r=>safe(r.F_sl,0)+" kN",r=>safe(r.isp_vac,1),r=>safe(r.prop/1000,2)+" t",r=>safe(r.jett/1000,2)+" t"])}else bp.classList.add("hidden");
  const a=data.ascent,l=data.look;
   svgLineChart("alt-chart",[{rows:a,x:"t",y:"alt_km",name:"Altitude (km)"},{rows:a,x:"t",y:"v_relative",name:"Velocity (m/s)",axis:"right"}],{rightAxis:true});
-  svgLineChart("aero-chart",[{rows:a,x:"t",y:"q_kPa",name:"Dynamic pressure (kPa)"},{rows:a,x:"t",y:"mach",name:"Mach",axis:"right"}],{rightAxis:true});
+  svgLineChart("aero-chart",[{rows:a,x:"t",y:"q_KPa",name:"Dynamic pressure (kPa)"},{rows:a,x:"t",y:"mach",name:"Mach",axis:"right"}],{rightAxis:true});
   svgLineChart("flight-chart",[{rows:a,x:"t",y:"fpa_deg",name:"Flight path angle (°)"},{rows:a,x:"t",y:"acc_g",name:"Acceleration (g)",axis:"right"}],{rightAxis:true});
   svgLineChart("look-chart",[{rows:l,x:"t",y:"el_deg",name:"Elevation (°)"},{rows:l,x:"t",y:"az_deg",name:"Azimuth (°)",axis:"right"}],{rightAxis:true});
   const vis=l.filter(x=>x.el_deg>p.min_elevation);
