@@ -263,6 +263,15 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
     v = np.cross(np.array([0.0, 0.0, OMEGA_E]), r)
     state = np.concatenate([r, v])
 
+    # Define the launch plane from the requested Earth-fixed compass azimuth.
+    # The plane is fixed in inertial space; the local compass bearing naturally
+    # changes along a great-circle ground track, but the vehicle must not yaw
+    # out of this plane after the initial pitch-over.
+    e0, n0, up0 = enu_basis(r)
+    launch_horizontal = np.sin(az) * e0 + np.cos(az) * n0
+    plane_normal = np.cross(up0, launch_horizontal)
+    plane_normal /= max(np.linalg.norm(plane_normal), 1e-12)
+
     stages = vehicle.stages
     prop_left = [sg.prop_mass for sg in stages]
     stage_time = [0.0 for _ in stages]
@@ -286,11 +295,19 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
 
     def steering(rv, tt, burning):
         rr, vv = rv[0:3], rv[3:6]
-        e, n, up = enu_basis(rr)
-        horiz = np.sin(az) * e + np.cos(az) * n
+        up = rr / max(np.linalg.norm(rr), 1e-12)
+        # Local horizontal direction tangent to the original launch plane.
+        # This follows the great-circle plane instead of repeatedly resetting
+        # to the same compass bearing at every point on the curved Earth.
+        horiz = np.cross(plane_normal, up)
+        nh = np.linalg.norm(horiz)
+        horiz = horiz / nh if nh > 1e-9 else launch_horizontal
         v_rel = vv - np.cross(np.array([0.0, 0.0, OMEGA_E]), rr)
-        nv = np.linalg.norm(v_rel)
+        # Remove any out-of-plane component from the commanded thrust vector.
+        v_plane = v_rel - np.dot(v_rel, plane_normal) * plane_normal
+        nv_plane = np.linalg.norm(v_plane)
         if not burning:
+            nv = np.linalg.norm(v_rel)
             return v_rel / nv if nv > 1e-6 else up
         if tt < vert_t:
             return up
@@ -299,10 +316,12 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             p = kick_ang * D2R * f
             return np.cos(p) * up + np.sin(p) * horiz
         if apo_lock:
-            vh = vv - np.dot(vv, up) * up
+            # Circularization steering stays prograde and tangent, but within
+            # the same launch plane.
+            vh = v_plane - np.dot(v_plane, up) * up
             nvh = np.linalg.norm(vh)
             return vh / nvh if nvh > 1.0 else horiz
-        return v_rel / nv if nv > 1.0 else up
+        return v_plane / nv_plane if nv_plane > 1.0 else up
 
     def deriv(rv, mass, thr_vec, alt):
         rr, vv = rv[0:3], rv[3:6]
