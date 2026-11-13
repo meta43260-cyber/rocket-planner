@@ -151,6 +151,11 @@ def records(df, columns=None, stride=1):
     return clean(view.to_dict(orient="records"))
 
 
+def _curve_points(value):
+    """Normalize an optional thrust curve from API input for the engine."""
+    return [(float(point[0]), float(point[1])) for point in (value or [])] or None
+
+
 def event_rows(ascent, fairing_t=None, payload_t=None, fairing_alt=110,
                timeline_stages=None, timeline_has_boosters=False):
     events = []
@@ -348,7 +353,7 @@ def simulate(data: SimulationInput):
             float(s.get("ignition_delay", 0.0)),
             s.get("burn_windows"),
             s.get("separation_t"),
-            [(float(point[0]), float(point[1])) for point in s.get("thrust_curve", [])] or None
+            _curve_points(s.get("thrust_curve"))
         ) for i, s in enumerate(stages_cfg)]
         vehicle = rp.Vehicle(
             stages=stages, payload=data.payload, fairing_mass=data.fairing_mass,
