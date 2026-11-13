@@ -183,6 +183,7 @@ $("db-save-child").addEventListener("click",async()=>{
    if(points.length&& (points.length<2||points[0][0]!==0||points.some((p,i)=>!Number.isFinite(p[0])||!Number.isFinite(p[1])||p[0]<0||p[1]<=0||(i>0&&p[0]<=points[i-1][0]))))throw Error("Thrust-Time Curve ต้องมีอย่างน้อย 2 จุด เริ่มที่ 0 วินาที ใช้แรงขับมากกว่า 0 และเวลาเพิ่มขึ้นทุกจุด");
   }
   const payload={};$("db-child-fields").querySelectorAll("[data-db-field]").forEach(el=>{const v=el.value.trim();if(v!=="")payload[el.dataset.dbField]=el.dataset.dbField==="thrust_curve_json"?JSON.parse(v):(el.type==="number"?Number(v):v)});
+  if(curveBox)payload.thrust_curve_json=points.length?points:null;
   if(kind==="rocket_stages"){
    for(const key of ["thrust_sl_kn","isp_sl_s"])if(!(key in payload))payload[key]=null;
    if(!payload.stage_number)throw Error("กรอกลำดับ Stage");
