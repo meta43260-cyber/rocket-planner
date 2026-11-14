@@ -100,16 +100,36 @@ function drawMap(data,p){
   splitTrack(orb).forEach(seg=>L.polyline(seg,{color:"#53d5d0",weight:2,dashArray:"6 5"}).addTo(mapObj));
   if(Number.isFinite(Number(p.site_lat))&&Number.isFinite(Number(p.site_lon)))L.marker([p.site_lat,p.site_lon]).addTo(mapObj).bindPopup("Launch site");
   if(Number.isFinite(Number(p.obs_lat))&&Number.isFinite(Number(p.obs_lon)))L.marker([p.obs_lat,p.obs_lon]).addTo(mapObj).bindPopup("Observer");
-  // Keep a stable world view: fitting a combined ascent + multi-orbit track
-  // can choose a nearly 360-degree longitude span and visually stretch the route.
-  requestAnimationFrame(()=>mapObj&&mapObj.invalidateSize());
+  // Frame the powered ascent, not the multi-orbit track. Including several
+  // orbital revolutions in fitBounds can create a world-spanning box and make
+  // the launch trajectory look distorted or disappear at a tiny zoom level.
+  requestAnimationFrame(()=>{
+   if(!mapObj)return;
+   mapObj.invalidateSize();
+   if(asc.length>1){
+    const bounds=L.latLngBounds(asc);
+    if(bounds.isValid())mapObj.fitBounds(bounds.pad(0.12),{padding:[24,24],maxZoom:4});
+   }else if(Number.isFinite(Number(p.site_lat))&&Number.isFinite(Number(p.site_lon))){
+    mapObj.setView([Number(p.site_lat),Number(p.site_lon)],3);
+   }else if(orb.length){
+    mapObj.setView(orb[0],2);
+   }
+  });
  }catch(err){console.error("Ground track render failed",err);if(mapObj){try{mapObj.remove()}catch(_){}mapObj=null}renderGroundTrackFallback(el,asc,orb,p)}
 }
 function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
-function tableRows(selector,rows,cols){
- const target=document.querySelector(selector.startsWith("#")?selector:`#${selector}`);if(!target)return;
+function tableRows(tableId,rows,cols){
+ const table=$(String(tableId).replace(/^#/,""));
+ if(!table){console.error("Result table not found:",tableId);return 0}
+ let target=table.tBodies&&table.tBodies[0];
+ if(!target)target=table.appendChild(document.createElement("tbody"));
  const data=Array.isArray(rows)?rows:[];
+ if(!data.length){
+  target.innerHTML='<tr class="empty-row"><td colspan="'+Math.max(1,cols.length)+'">ไม่มีข้อมูลสำหรับรายการนี้</td></tr>';
+  return 0;
+ }
  target.innerHTML=data.map(r=>"<tr>"+cols.map(c=>"<td>"+escapeHtml(typeof c==="function"?c(r):r[c])+"</td>").join("")+"</tr>").join("");
+ return data.length;
 }
 function sampleRows(rows,interval=10){
  if(!Array.isArray(rows)||!rows.length)return [];
@@ -136,11 +156,11 @@ function render(data,p){
  metric("PHOTO WINDOW",safe(s.photo_window_percent,0)+"%");
  const warn=[...(data.model_warnings||[])];if(p.mission_type==="escape"&&e.e<1)warn.push("พลังงานยังไม่พอหลุดพ้นโลก (e < 1)");if(e.e>=1)warn.push("Escape trajectory: orbital eccentricity ≥ 1");if(data.boost_warnings?.length)warn.push(...data.boost_warnings);if(s.visible_count===0)warn.push("ไม่พบช่วงที่จรวดสูงกว่ามุมเงยขั้นต่ำจากตำแหน่งผู้ชม");$("warnings").innerHTML=warn.length?'<div class="notice">'+warn.map(x=>"⚠ "+x).join("<br>")+"</div>":"";
  drawMap(data,p);
- tableRows("events-table tbody",data.events||[],[r=>r.event,r=>safe(r.t,1),r=>safe(r.alt_km,1),r=>safe(r.velocity_mps,0)]);
- const bp=$("boost-panel");if(data.boost_log?.length){bp.classList.remove("hidden");tableRows("boost-table tbody",data.boost_log,[r=>safe(r.t0,1)+"–"+safe(r.t1,1),r=>r.name,r=>safe(r.F_sl,0)+" kN",r=>safe(r.isp_vac,1),r=>safe(r.prop/1000,2)+" t",r=>safe(r.jett/1000,2)+" t"])}else bp.classList.add("hidden");
+ tableRows("events-table",data.events||[],[r=>r.event,r=>safe(r.t,1),r=>safe(r.alt_km,1),r=>safe(r.velocity_mps,0)]);
+ const bp=$("boost-panel");if(p.use_boost){bp.classList.remove("hidden");tableRows("boost-table",data.boost_log||[],[r=>safe(r.t0,1)+"–"+safe(r.t1,1),r=>r.name,r=>safe(r.F_sl,0)+" kN",r=>safe(r.isp_vac,1),r=>safe(r.prop/1000,2)+" t",r=>safe(r.jett/1000,2)+" t"])}else bp.classList.add("hidden");
  const a=Array.isArray(data.ascent)?data.ascent:[],l=Array.isArray(data.look)?data.look:[];
  const ascentSamples=sampleRows(a,10);
- tableRows("ascent-table tbody",ascentSamples,[
+ tableRows("ascent-table",ascentSamples,[
   r=>safe(r.t,1),r=>safe(r.alt_km,2),r=>safe(r.v_relative,0),r=>safe(r.mach,2),
   r=>safe(r.q_kPa,2),r=>safe(r.fpa_deg,2),r=>safe(r.acc_g,2),
   r=>safe(r.mass,0),r=>safe(r.thrust_kN,0),r=>r.stage||"—"
@@ -151,7 +171,7 @@ function render(data,p){
  $("report").textContent=data.report;
   renderSkySafely(l,p.min_elevation);
 
-  const table=sampleRows(vis,10);tableRows("look-table tbody",table,[r=>safe(r.t,1),r=>safe(r.az_deg,2),r=>safe(r.el_deg,2),r=>safe(r.range_km,2),r=>safe(r.alt_km,2),r=>safe(r.angular_rate,3)]);
+  const table=sampleRows(vis,10);tableRows("look-table",table,[r=>safe(r.t,1),r=>safe(r.az_deg,2),r=>safe(r.el_deg,2),r=>safe(r.range_km,2),r=>safe(r.alt_km,2),r=>safe(r.angular_rate,3)]);
  const entries=[["Semi-major axis",e.a_km,"km"],["Eccentricity",e.e,""],["Inclination",e.inc_deg,"°"],["RAAN",e.raan_deg,"°"],["Argument of periapsis",e.argp_deg,"°"],["True anomaly",e.ta_deg,"°"],["Orbital period",e.period_min,"min"],["Earth rotation bonus",s.earth_rotation_bonus_mps,"m/s"]];
  $("elements").innerHTML=entries.map(([k,x,u])=>`<div class="element"><span>${k}</span><b>${x===null?"—":safe(x,2)+u}</b></div>`).join("");
 }
