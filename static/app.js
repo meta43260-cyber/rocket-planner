@@ -83,7 +83,7 @@ function drawMap(data,p){
 }
 function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function tableRows(id,rows,cols){
- const target=document.querySelector(id);if(!target)return;
+ const target=document.querySelector(`#${id} tbody`);if(!target)return;
  const data=Array.isArray(rows)?rows:[];
  target.innerHTML=data.map(r=>"<tr>"+cols.map(c=>"<td>"+escapeHtml(typeof c==="function"?c(r):r[c])+"</td>").join("")+"</tr>").join("");
 }
