@@ -45,7 +45,30 @@ function renderSkySafely(rows,minEl){
  try{svgSkyChart("sky-chart",rows,minEl)}
  catch(err){const el=$("sky-chart");if(el)el.innerHTML='<p class="hint">แผนภาพท้องฟ้าแสดงผลไม่ได้: '+escapeHtml(err.message||String(err))+'</p>';console.error("Sky view render failed",err)}
 }
-function splitTrack(points){const out=[];let seg=[];for(const p of points){if(seg.length&&Math.abs(p[1]-seg[seg.length-1][1])>180){if(seg.length>1)out.push(seg);seg=[]}seg.push(p)}if(seg.length>1)out.push(seg);return out}
+function splitTrack(points){
+ const out=[];let seg=[];
+ const normLon=x=>{let v=((Number(x)+180)%360+360)%360-180;return Object.is(v,-0)?0:v};
+ for(const point of points){
+  const lat=Number(point[0]),lon=normLon(point[1]);
+  if(!Number.isFinite(lat)||!Number.isFinite(lon))continue;
+  if(seg.length){
+   const prev=seg[seg.length-1],delta=lon-prev[1];
+   if(Math.abs(delta)>180){
+    const eastward=delta< -180, edge=eastward?180:-180;
+    const unwrapped=lon+(eastward?360:-360);
+    const f=(edge-prev[1])/(unwrapped-prev[1]);
+    const crossLat=prev[0]+(lat-prev[0])*f;
+    seg.push([crossLat,edge]);
+    if(seg.length>1)out.push(seg);
+    seg=[ [crossLat,-edge], [lat,lon] ];
+    continue;
+   }
+  }
+  seg.push([lat,lon]);
+ }
+ if(seg.length>1)out.push(seg);
+ return out;
+}
 function renderGroundTrackFallback(el,asc,orb,p){
  const W=960,H=480,project=pt=>[(Number(pt[1])+180)/360*W,(90-Math.max(-90,Math.min(90,Number(pt[0]))))/180*H];
  const path=points=>splitTrack(points).map(seg=>seg.map((pt,i)=>{const q=project(pt);return (i?"L":"M")+q[0].toFixed(1)+","+q[1].toFixed(1)}).join(" ")).join(" ");
@@ -68,7 +91,7 @@ function drawMap(data,p){
  try{
   if(mapObj){mapObj.remove();mapObj=null}
   if(!window.L||typeof L.map!=="function"){renderGroundTrackFallback(el,asc,orb,p);return}
-  mapObj=L.map(el).setView([20,80],2);
+  mapObj=L.map(el,{worldCopyJump:true}).setView([0,0],2);
   const tiles=L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap",maxZoom:18});
   let tileErrors=0;
   tiles.on("tileerror",()=>{tileErrors++;if(tileErrors>=3&&mapObj){try{mapObj.remove()}catch(_){}mapObj=null;renderGroundTrackFallback(el,asc,orb,p)}});
@@ -77,13 +100,14 @@ function drawMap(data,p){
   splitTrack(orb).forEach(seg=>L.polyline(seg,{color:"#53d5d0",weight:2,dashArray:"6 5"}).addTo(mapObj));
   if(Number.isFinite(Number(p.site_lat))&&Number.isFinite(Number(p.site_lon)))L.marker([p.site_lat,p.site_lon]).addTo(mapObj).bindPopup("Launch site");
   if(Number.isFinite(Number(p.obs_lat))&&Number.isFinite(Number(p.obs_lon)))L.marker([p.obs_lat,p.obs_lon]).addTo(mapObj).bindPopup("Observer");
-  const bounds=L.latLngBounds(asc.concat(orb));if(bounds.isValid())mapObj.fitBounds(bounds.pad(.1));
+  // Keep a stable world view: fitting a combined ascent + multi-orbit track
+  // can choose a nearly 360-degree longitude span and visually stretch the route.
   requestAnimationFrame(()=>mapObj&&mapObj.invalidateSize());
  }catch(err){console.error("Ground track render failed",err);if(mapObj){try{mapObj.remove()}catch(_){}mapObj=null}renderGroundTrackFallback(el,asc,orb,p)}
 }
 function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
-function tableRows(id,rows,cols){
- const target=document.querySelector(`#${id} tbody`);if(!target)return;
+function tableRows(selector,rows,cols){
+ const target=document.querySelector(selector.startsWith("#")?selector:`#${selector}`);if(!target)return;
  const data=Array.isArray(rows)?rows:[];
  target.innerHTML=data.map(r=>"<tr>"+cols.map(c=>"<td>"+escapeHtml(typeof c==="function"?c(r):r[c])+"</td>").join("")+"</tr>").join("");
 }
