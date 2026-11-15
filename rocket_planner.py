@@ -271,8 +271,9 @@ def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
 
     The radial-velocity controller regulates *net* radial acceleration, not
     thrust acceleration alone.  Account for the inward environmental radial
-    acceleration (gravity; default is a near-surface approximation) before
-    allocating thrust.  The resulting command is still bounded so the
+    acceleration (gravity is supplied by the flight-state caller) before
+    allocating thrust. The default zero preserves standalone helper behavior.
+    The resulting command is still bounded so the
     controller cannot request an impossible thrust vector or reverse tangent.
     """
 
