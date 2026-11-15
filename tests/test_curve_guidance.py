@@ -152,23 +152,28 @@ def test_closed_loop_guidance_reduces_radial_target_near_orbit():
     )
     assert near[0] < far[0]
 
-def test_capture_guidance_compensates_for_inward_radial_gravity():
+def test_radial_environment_includes_tangential_curvature():
+    radius = rp.RE + 450_000.0
+    circular_speed = (rp.MU / radius) ** 0.5
+    assert rp._radial_environment_accel(radius, circular_speed) == pytest.approx(0.0, abs=1e-12)
+    assert rp._radial_environment_accel(radius, 7000.0) < 0.0
+    assert rp._radial_environment_accel(radius, 8000.0) > 0.0
+
+
+def test_capture_guidance_uses_net_radial_environment_at_circular_speed():
     up = [1.0, 0.0, 0.0]
-    args = (up, [0.0, 7000.0, 0.0],
-            rp.RE + 450_000.0, rp.RE + 250_000.0, 10.0)
-    uncompensated = rp._closed_loop_capture_direction(
-        *args, radial_environment_accel=0.0
+    radius = rp.RE + 450_000.0
+    circular_speed = (rp.MU / radius) ** 0.5
+    direction = rp._closed_loop_capture_direction(
+        up, [0.0, circular_speed, 0.0],
+        radius, radius, 10.0,
+        radial_environment_accel=rp._radial_environment_accel(radius, circular_speed)
     )
-    compensated = rp._closed_loop_capture_direction(
-        *args, radial_environment_accel=-9.5
-    )
-    assert compensated[0] > uncompensated[0]
-    assert compensated[0] <= 0.65 + 1e-12
-    assert compensated[1] > 0.0
-    assert abs(float(compensated @ compensated) - 1.0) < 1e-12
+    assert direction[0] == pytest.approx(0.0, abs=1e-10)
+    assert direction[1] == pytest.approx(1.0, abs=1e-10)
 
 
-def test_capture_guidance_gravity_compensation_respects_thrust_limit():
+def test_capture_guidance_radial_command_respects_thrust_limit():
     direction = rp._closed_loop_capture_direction(
         [1.0, 0.0, 0.0], [0.0, 7000.0, 0.0],
         rp.RE + 450_000.0, rp.RE + 100_000.0, 2.0,
