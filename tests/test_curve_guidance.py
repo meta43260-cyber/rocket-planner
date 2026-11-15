@@ -73,3 +73,36 @@ def test_booster_phase_sea_level_curve_uses_ratio_not_constant_offset():
     assert first["thrust_sl"] > 0.0
     assert first["thrust_vac"] > 0.0
     assert first["thrust_sl"] <= first["thrust_vac"]
+
+
+def test_boost_mode_applies_core_shutdown_and_separation_timeline():
+    from main import TimelineStage, TimelineBurn, _apply_boost_core_timeline
+    phases = [
+        {"name": "boost+core", "burn_time": 137.0, "prop_mass": 100000.0},
+        {"name": "core-only", "burn_time": 323.0, "prop_mass": 50000.0},
+    ]
+    log = [
+        {"t0": 0.0, "t1": 137.0},
+        {"t0": 137.0, "t1": 464.0},
+    ]
+    row = TimelineStage(
+        burns=[TimelineBurn(ignition_t=0.0, cutoff_t=460.0)],
+        separation_t=466.0,
+    )
+    _apply_boost_core_timeline(phases, log, row)
+    assert phases[-1]["burn_windows"] == [(137.0, 460.0)]
+    assert phases[-1]["burn_time"] == pytest.approx(323.0)
+    assert phases[-1]["separation_t"] == pytest.approx(466.0)
+
+
+def test_boost_core_timeline_rejects_cutoff_outside_generated_phase():
+    from fastapi import HTTPException
+    from main import TimelineStage, TimelineBurn, _apply_boost_core_timeline
+    phases = [{"name": "core-only", "burn_time": 300.0}]
+    log = [{"t0": 137.0, "t1": 437.0}]
+    row = TimelineStage(
+        burns=[TimelineBurn(ignition_t=0.0, cutoff_t=460.0)],
+        separation_t=466.0,
+    )
+    with pytest.raises(HTTPException):
+        _apply_boost_core_timeline(phases, log, row)
