@@ -251,7 +251,7 @@ def auto_ascent_profile(vehicle: Vehicle, mission: Mission) -> Tuple[float, floa
 # ============================================================
 # ASCENT SIMULATION
 # ============================================================
-def _capture_guidance_threshold(target_radius, fraction=0.70,
+def _capture_guidance_threshold(target_radius, fraction=0.35,
                                   minimum_altitude=50_000.0):
     """Start terminal capture guidance before the predicted apogee reaches target.
 
@@ -447,9 +447,10 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
                     continue
                 break
 
+        capture_threshold = _capture_guidance_threshold(target_r)
+        predicted_apoapsis = apoapsis_radius(state[0:3], state[3:6])
         if not apo_lock and alt > 50000.0:
-            capture_threshold = _capture_guidance_threshold(target_r)
-            if apoapsis_radius(state[0:3], state[3:6]) >= capture_threshold:
+            if predicted_apoapsis >= capture_threshold:
                 apo_lock = True
 
         rho, p, T_atm, a_snd = atmosphere(alt)
@@ -481,6 +482,9 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
                 mach=vr / a_snd, q_kPa=0.5 * rho * vr * vr / 1000.0,
                 fpa_deg=fpa, mass=mass, thrust_kN=thr / 1000.0,
                 acc_g=np.linalg.norm(thr_vec) / mass / G0,
+                predicted_apoapsis_alt_km=(predicted_apoapsis - RE) / 1000.0,
+                capture_guidance_active=apo_lock,
+                capture_threshold_alt_km=(capture_threshold - RE) / 1000.0,
                 stage=stages[idx].name if idx < len(stages) else "coast"))
             next_out += dt_out
 
