@@ -413,10 +413,9 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             # the value needed to approach the target orbital radius. This
             # avoids the old one-way "horizontal-only" lock, which could leave
             # a low-thrust upper stage unable to correct a descending flight path.
-            # Include the local central-gravity component in the radial
-            # acceleration budget. Without this term the controller treats
-            # thrust acceleration as net acceleration and under-commands
-            # upward thrust by roughly 9 m/s² throughout orbital ascent.
+            # Include the natural radial acceleration from both gravity
+            # and tangential orbital curvature. Using gravity alone would
+            # request unnecessary radial thrust near circular speed.
             tangent_speed = float(np.linalg.norm(
                 v_plane - np.dot(v_plane, up) * up
             ))
