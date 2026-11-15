@@ -279,6 +279,19 @@ def _project_velocity_to_plane(velocity, plane_normal):
     return velocity - np.dot(velocity, normal) * normal
 
 
+def _ascent_guidance_mode(time_s, vertical_time, kick_duration, capture_active, burning):
+    """Label the active ascent steering phase for telemetry and diagnosis."""
+    if not burning:
+        return "coast"
+    if capture_active:
+        return "orbital_capture"
+    if time_s < vertical_time:
+        return "vertical"
+    if time_s < vertical_time + kick_duration:
+        return "pitch_kick"
+    return "gravity_turn"
+
+
 def _capture_radial_authority_limit(speed_ratio):
     """Reserve tangential thrust early, then release radial authority near orbit."""
     ratio = float(np.clip(speed_ratio, 0.0, 1.0))
@@ -557,6 +570,18 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             thrust_tangential_fraction = float(np.dot(u, tangent_hat))
             thrust_radial_accel = thrust_accel * thrust_radial_fraction
             thrust_tangential_accel = thrust_accel * thrust_tangential_fraction
+            inertial_velocity = state[3:6]
+            inertial_radial_velocity = float(np.dot(inertial_velocity, up))
+            inertial_tangent_velocity = inertial_velocity - inertial_radial_velocity * up
+            inertial_tangential_speed = float(np.linalg.norm(inertial_tangent_velocity))
+            inertial_fpa = np.degrees(np.arctan2(
+                inertial_radial_velocity, max(inertial_tangential_speed, 1e-9)))
+            guidance_mode = _ascent_guidance_mode(
+                t, vert_t, kick_dur, apo_lock, burning
+            )
+            commanded_pitch_deg = float(np.degrees(np.arcsin(np.clip(
+                thrust_radial_fraction, -1.0, 1.0
+            ))))
             fpa = np.degrees(np.arcsin(np.clip(
                 radial_velocity / max(vr, 1e-6), -1, 1)))
             rows.append(dict(
@@ -567,7 +592,12 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
                 radial_velocity_mps=radial_velocity,
                 tangential_velocity_mps=tangent_speed,
                 mach=vr / a_snd, q_kPa=0.5 * rho * vr * vr / 1000.0,
-                fpa_deg=fpa, mass=mass, thrust_kN=thr / 1000.0,
+                fpa_deg=fpa, inertial_fpa_deg=inertial_fpa,
+                inertial_radial_velocity_mps=inertial_radial_velocity,
+                inertial_tangential_velocity_mps=inertial_tangential_speed,
+                guidance_mode=guidance_mode,
+                commanded_pitch_deg=commanded_pitch_deg,
+                mass=mass, thrust_kN=thr / 1000.0,
                 acc_g=np.linalg.norm(thr_vec) / mass / G0,
                 thrust_radial_fraction=thrust_radial_fraction,
                 thrust_tangential_fraction=thrust_tangential_fraction,
