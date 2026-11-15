@@ -176,3 +176,28 @@ def test_capture_guidance_gravity_compensation_respects_thrust_limit():
     )
     assert direction[0] == pytest.approx(0.65)
     assert direction[1] == pytest.approx((1.0 - 0.65 ** 2) ** 0.5)
+
+
+
+def test_timeline_events_remain_pending_until_restart_and_separation():
+    stages = [
+        rp.Stage(
+            name="ULPM", thrust_sl=None, thrust_vac=180_000.0,
+            isp_sl=None, isp_vac=457.0, prop_mass=30_000.0,
+            dry_mass=6_000.0, burn_time=696.0, area=22.902,
+            burn_windows=[(474.0, 1152.0), (4281.0, 4299.0)],
+            separation_t=6844.0,
+        )
+    ]
+    assert rp._has_pending_timeline_events(stages, 0, 1200.0)
+    assert rp._has_pending_timeline_events(stages, 0, 4300.0)
+    assert not rp._has_pending_timeline_events(stages, 0, 6844.0)
+
+
+def test_periapsis_diagnostic_identifies_suborbital_peak():
+    radius = rp.RE + 569_170.0
+    speed = 6_436.4
+    state_r = [radius, 0.0, 0.0]
+    state_v = [0.0, speed, 0.0]
+    periapsis_alt = rp.periapsis_radius(state_r, state_v) - rp.RE
+    assert periapsis_alt / 1000.0 == pytest.approx(-2453.0, abs=2.0)
