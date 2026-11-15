@@ -265,16 +265,18 @@ def _capture_guidance_threshold(target_radius, fraction=0.35,
 
 
 def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
-                                  thrust_accel, tau=300.0):
-    """Return a normalized in-plane thrust direction with gradual radial-velocity feedback.
+                                  thrust_accel, tau=300.0,
+                                  radial_environment_accel=0.0):
+    """Return a normalized in-plane thrust direction with radial gravity compensation.
 
-    A short 90 s response horizon and a 180 m/s radial-speed cap are too
-    restrictive during early ascent: the controller can aggressively pitch
-    away from the climb while the target orbit is still hundreds of kilometres
-    above.  A longer horizon and a higher, distance-scaled radial-speed target
-    preserve ascent energy early and reduce radial speed progressively near
-    the target radius.
+    The radial-velocity controller regulates *net* radial acceleration, not
+    thrust acceleration alone.  Account for the inward environmental radial
+    acceleration (gravity is supplied by the flight-state caller) before
+    allocating thrust. The default zero preserves standalone helper behavior.
+    The resulting command is still bounded so the
+    controller cannot request an impossible thrust vector or reverse tangent.
     """
+
     up = np.asarray(up, dtype=float)
     up = up / max(np.linalg.norm(up), 1e-12)
     v_plane = np.asarray(v_plane, dtype=float)
@@ -290,8 +292,12 @@ def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
         (target_radius - current_radius) / max(tau, 1.0), -120.0, 1200.0
     ))
     radial_error = desired_radial_velocity - radial_velocity
+    desired_net_radial_accel = radial_error / max(tau, 1.0)
+    required_radial_thrust_accel = (
+        desired_net_radial_accel - float(radial_environment_accel)
+    )
     radial_fraction = float(np.clip(
-        radial_error / max(thrust_accel * tau, 1e-6), -0.65, 0.65
+        required_radial_thrust_accel / max(thrust_accel, 1e-6), -0.65, 0.65
     ))
     tangent_fraction = np.sqrt(max(0.0, 1.0 - radial_fraction ** 2))
     direction = tangent_fraction * tangent + radial_fraction * up
@@ -381,8 +387,14 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             # the value needed to approach the target orbital radius. This
             # avoids the old one-way "horizontal-only" lock, which could leave
             # a low-thrust upper stage unable to correct a descending flight path.
+            # Include the local central-gravity component in the radial
+            # acceleration budget. Without this term the controller treats
+            # thrust acceleration as net acceleration and under-commands
+            # upward thrust by roughly 9 m/s² throughout orbital ascent.
+            radial_gravity = -MU / (rn * rn)
             return _closed_loop_capture_direction(
-                up, v_plane, target_r, rn, thrust_accel
+                up, v_plane, target_r, rn, thrust_accel,
+                radial_environment_accel=radial_gravity
             )
         return v_plane / nv_plane if nv_plane > 1.0 else up
 
