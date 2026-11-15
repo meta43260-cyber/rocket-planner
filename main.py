@@ -446,19 +446,29 @@ def simulate(data: SimulationInput):
                 raise
             last = ascent.iloc[-1]
             peak = ascent.loc[ascent["alt_km"].idxmax()]
+            def ascent_sample_diagnostics(sample):
+                return (
+                    f"stage={sample.get('stage', 'unknown')}, "
+                    f"t=+{float(sample.get('t', 0.0)):.1f}s, "
+                    f"alt={float(sample.get('alt_km', 0.0)):.2f}km, "
+                    f"FPA={float(sample.get('fpa_deg', 0.0)):.2f}deg, "
+                    f"v_radial={float(sample.get('radial_velocity_mps', 0.0)):.1f}m/s, "
+                    f"v_tangential={float(sample.get('tangential_velocity_mps', 0.0)):.1f}m/s, "
+                    f"thrust={float(sample.get('thrust_kN', 0.0)):.1f}kN, "
+                    f"mass={float(sample.get('mass', 0.0)):.1f}kg, "
+                    f"thrust_radial_fraction={float(sample.get('thrust_radial_fraction', 0.0)):.3f}, "
+                    f"thrust_radial_accel={float(sample.get('thrust_radial_accel_mps2', 0.0)):.2f}m/s2, "
+                    f"thrust_tangential_accel={float(sample.get('thrust_tangential_accel_mps2', 0.0)):.2f}m/s2, "
+                    f"burn_elapsed={float(sample.get('stage_burn_elapsed_s', 0.0)):.1f}s, "
+                    f"prop_remaining={float(sample.get('stage_propellant_remaining_kg', 0.0)):.1f}kg"
+                )
             detail = (
-                f"; last trajectory sample: stage={last.get('stage', 'unknown')}, "
-                f"thrust={float(last.get('thrust_kN', 0.0)):.2f} kN, "
-                f"mass={float(last.get('mass', 0.0)):.1f} kg, "
-                f"altitude={float(last.get('alt_km', 0.0)):.2f} km, "
-                f"vertical_fpa={float(last.get('fpa_deg', 0.0)):.2f} deg; "
-                f"capture_guidance_active={bool(last.get('capture_guidance_active', False))}, "
-                f"capture_threshold={float(last.get('capture_threshold_alt_km', 0.0)):.1f} km, "
-                f"predicted_apoapsis={float(last.get('predicted_apoapsis_alt_km', 0.0)):.1f} km; "
-                f"maximum altitude={float(peak.get('alt_km', 0.0)):.2f} km "
-                f"at T+{float(peak.get('t', 0.0)):.1f} s "
-                f"(predicted apoapsis={float(peak.get('predicted_apoapsis_alt_km', 0.0)):.1f} km, "
-                f"capture_guidance_active={bool(peak.get('capture_guidance_active', False))})"
+                f"; capture_guidance_start=+{float(peak.get('capture_guidance_start_t_s') or 0.0):.1f}s, "
+                f"capture_guidance_active_at_peak={bool(peak.get('capture_guidance_active', False))}, "
+                f"capture_threshold={float(peak.get('capture_threshold_alt_km', 0.0)):.1f}km, "
+                f"predicted_apoapsis_at_peak={float(peak.get('predicted_apoapsis_alt_km', 0.0)):.1f}km; "
+                f"peak sample: {ascent_sample_diagnostics(peak)}; "
+                f"last sample: {ascent_sample_diagnostics(last)}"
             )
             raise ValueError(f"{exc}{detail}") from exc
         elements = rp.orbital_elements(orbit_state[0:3], orbit_state[3:6])
