@@ -83,12 +83,33 @@ class SupabaseREST:
                                  method, path, response.headers.get("Content-Type", "unknown"), len(raw))
                     raise HTTPException(status_code=502, detail="Supabase returned an invalid response.") from exc
         except HTTPError as exc:
-            # Do not relay provider internals or tokens to the public client.
-            if exc.code in (401, 403):
-                raise HTTPException(status_code=403, detail="Supabase denied this operation.") from exc
+            # PostgREST's structured error body contains the actionable reason
+            # (RLS, missing privilege, constraint, invalid field, expired JWT).
+            # Surface only bounded message/code fields; never expose headers or tokens.
+            try:
+                provider_error = json.loads(exc.read().decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError, OSError):
+                provider_error = {}
+            if not isinstance(provider_error, dict):
+                provider_error = {}
+            error_code = str(provider_error.get("code") or "")[:32]
+            error_message = " ".join(str(provider_error.get("message") or "").split())[:320]
+            resource = path.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1] or "Supabase"
+            diagnostic = f"{error_message} (code {error_code})" if error_message and error_code else (
+                f"{error_message} (code {error_code})" if error_message else
+                f"provider returned HTTP {exc.code}" + (f" (code {error_code})" if error_code else "")
+            )
+            logger.warning("Supabase rejected %s %s: HTTP %s; %s",
+                           method, resource, exc.code, diagnostic)
+            if exc.code == 401:
+                raise HTTPException(status_code=401, detail=f"Supabase authentication failed for {resource}: {diagnostic}") from exc
+            if exc.code == 403:
+                raise HTTPException(status_code=403, detail=f"Supabase permission denied for {resource}: {diagnostic}") from exc
             if exc.code == 404:
-                raise HTTPException(status_code=404, detail="Rocket record not found.") from exc
-            raise HTTPException(status_code=502, detail=f"Supabase request failed ({exc.code}).") from exc
+                raise HTTPException(status_code=404, detail=f"Rocket record not found: {diagnostic}") from exc
+            if 400 <= exc.code < 500:
+                raise HTTPException(status_code=exc.code, detail=f"Supabase rejected {method} on {resource}: {diagnostic}") from exc
+            raise HTTPException(status_code=502, detail=f"Supabase request failed for {resource}: {diagnostic}") from exc
         except (URLError, TimeoutError) as exc:
             logger.warning("Supabase connection failed for %s %s: %s", method, path, type(exc).__name__)
             raise HTTPException(status_code=503, detail="Supabase is temporarily unreachable.") from exc
