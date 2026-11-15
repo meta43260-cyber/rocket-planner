@@ -246,6 +246,32 @@ def auto_ascent_profile(vehicle: Vehicle, mission: Mission) -> Tuple[float, floa
 # ============================================================
 # ASCENT SIMULATION
 # ============================================================
+def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
+                                  thrust_accel, tau=90.0):
+    """Return a normalized in-plane thrust direction with radial-velocity feedback."""
+    up = np.asarray(up, dtype=float)
+    up = up / max(np.linalg.norm(up), 1e-12)
+    v_plane = np.asarray(v_plane, dtype=float)
+    radial_velocity = float(np.dot(v_plane, up))
+    tangent_vec = v_plane - radial_velocity * up
+    tangent_speed = float(np.linalg.norm(tangent_vec))
+    if tangent_speed <= 1.0:
+        return up
+    tangent = tangent_vec / tangent_speed
+    if thrust_accel <= 1e-6:
+        return tangent
+    desired_radial_velocity = float(np.clip(
+        (target_radius - current_radius) / max(tau, 1.0), -120.0, 180.0
+    ))
+    radial_error = desired_radial_velocity - radial_velocity
+    radial_fraction = float(np.clip(
+        radial_error / max(thrust_accel * tau, 1e-6), -0.65, 0.65
+    ))
+    tangent_fraction = np.sqrt(max(0.0, 1.0 - radial_fraction ** 2))
+    direction = tangent_fraction * tangent + radial_fraction * up
+    return direction / max(np.linalg.norm(direction), 1e-12)
+
+
 def simulate_ascent(vehicle: Vehicle, mission: Mission,
                     dt: float = 0.05, dt_out: float = 0.5,
                     max_time: float = 2000.0, verbose: bool = True):
@@ -328,22 +354,9 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             # the value needed to approach the target orbital radius. This
             # avoids the old one-way "horizontal-only" lock, which could leave
             # a low-thrust upper stage unable to correct a descending flight path.
-            vh = v_plane - np.dot(v_plane, up) * up
-            nvh = np.linalg.norm(vh)
-            if nvh <= 1.0:
-                return horiz
-            tangent = vh / nvh
-            tau = 90.0
-            radial_velocity = float(np.dot(v_plane, up))
-            desired_radial_velocity = float(np.clip((target_r - rn) / tau, -120.0, 180.0))
-            radial_error = desired_radial_velocity - radial_velocity
-            # Convert radial-velocity error into a bounded thrust-vector tilt.
-            # The cap preserves a strong prograde component for orbital energy.
-            radial_fraction = float(np.clip(
-                radial_error / max(thrust_accel * tau, 1e-6), -0.65, 0.65
-            ))
-            tangent_fraction = np.sqrt(max(0.0, 1.0 - radial_fraction ** 2))
-            return tangent_fraction * tangent + radial_fraction * up
+            return _closed_loop_capture_direction(
+                up, v_plane, target_r, rn, thrust_accel
+            )
         return v_plane / nv_plane if nv_plane > 1.0 else up
 
     def deriv(rv, mass, thr_vec, alt):
