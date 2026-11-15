@@ -452,8 +452,13 @@ def simulate(data: SimulationInput):
                 f"mass={float(last.get('mass', 0.0)):.1f} kg, "
                 f"altitude={float(last.get('alt_km', 0.0)):.2f} km, "
                 f"vertical_fpa={float(last.get('fpa_deg', 0.0)):.2f} deg; "
+                f"capture_guidance_active={bool(last.get('capture_guidance_active', False))}, "
+                f"capture_threshold={float(last.get('capture_threshold_alt_km', 0.0)):.1f} km, "
+                f"predicted_apoapsis={float(last.get('predicted_apoapsis_alt_km', 0.0)):.1f} km; "
                 f"maximum altitude={float(peak.get('alt_km', 0.0)):.2f} km "
-                f"at T+{float(peak.get('t', 0.0)):.1f} s"
+                f"at T+{float(peak.get('t', 0.0)):.1f} s "
+                f"(predicted apoapsis={float(peak.get('predicted_apoapsis_alt_km', 0.0)):.1f} km, "
+                f"capture_guidance_active={bool(peak.get('capture_guidance_active', False))})"
             )
             raise ValueError(f"{exc}{detail}") from exc
         elements = rp.orbital_elements(orbit_state[0:3], orbit_state[3:6])
