@@ -39,3 +39,8 @@ def test_closed_loop_guidance_corrects_downward_velocity():
         up, [-50.0, 7000.0, 0.0], target_radius, current_radius, 5.0
     )
     assert descending[0] > level[0]
+
+
+def test_thrust_curve_accepts_275_points():
+    points = [(i * 0.5, 0.0 if i == 0 else 3000.0 + i) for i in range(275)]
+    _validate_thrust_curve(points, "P160C")
