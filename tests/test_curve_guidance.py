@@ -293,5 +293,5 @@ def test_orbital_energy_diagnostics_returns_nan_circularization_for_escape():
         [rp.RE + 200_000.0, 0.0, 0.0], [0.0, 12_000.0, 0.0]
     )
     assert diag["specific_energy_mj_kg"] > 0.0
-    assert np.isnan(diag["apoapsis_circularization_dv_mps"])
-    assert np.isnan(diag["remaining_stage_dv_mps"])
+    assert rp.np.isnan(diag["apoapsis_circularization_dv_mps"])
+    assert rp.np.isnan(diag["remaining_stage_dv_mps"])
