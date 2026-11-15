@@ -339,6 +339,7 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
     fairing_on = True
     apo_lock = False
     t = 0.0
+    capture_guidance_start_t = None
 
     target_r = RE + mission.target_alt
     if mission.mission_type != "circular":
@@ -460,6 +461,7 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
         if not apo_lock and alt > 50000.0:
             if predicted_apoapsis >= capture_threshold:
                 apo_lock = True
+                capture_guidance_start_t = t
 
         rho, p, T_atm, a_snd = atmosphere(alt)
         mass = current_mass()
@@ -480,18 +482,35 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             v_rel = state[3:6] - np.cross(np.array([0.0, 0.0, OMEGA_E]), state[0:3])
             vr = np.linalg.norm(v_rel)
             up = state[0:3] / rn
+            radial_velocity = float(np.dot(v_rel, up))
+            tangent_vec = v_rel - radial_velocity * up
+            tangent_speed = float(np.linalg.norm(tangent_vec))
+            tangent_hat = tangent_vec / tangent_speed if tangent_speed > 1e-6 else np.zeros(3)
+            thrust_radial_fraction = float(np.dot(u, up))
+            thrust_tangential_fraction = float(np.dot(u, tangent_hat))
+            thrust_radial_accel = thrust_accel * thrust_radial_fraction
+            thrust_tangential_accel = thrust_accel * thrust_tangential_fraction
             fpa = np.degrees(np.arcsin(np.clip(
-                np.dot(v_rel, up) / max(vr, 1e-6), -1, 1)))
+                radial_velocity / max(vr, 1e-6), -1, 1)))
             rows.append(dict(
                 t=t, x=state[0], y=state[1], z=state[2],
                 vx=state[3], vy=state[4], vz=state[5],
                 lat=lat_d, lon=lon_d, alt_km=alt / 1000.0,
                 v_inertial=np.linalg.norm(state[3:6]), v_relative=vr,
+                radial_velocity_mps=radial_velocity,
+                tangential_velocity_mps=tangent_speed,
                 mach=vr / a_snd, q_kPa=0.5 * rho * vr * vr / 1000.0,
                 fpa_deg=fpa, mass=mass, thrust_kN=thr / 1000.0,
                 acc_g=np.linalg.norm(thr_vec) / mass / G0,
+                thrust_radial_fraction=thrust_radial_fraction,
+                thrust_tangential_fraction=thrust_tangential_fraction,
+                thrust_radial_accel_mps2=thrust_radial_accel,
+                thrust_tangential_accel_mps2=thrust_tangential_accel,
+                stage_burn_elapsed_s=stage_time[idx] if idx < len(stages) else 0.0,
+                stage_propellant_remaining_kg=prop_left[idx] if idx < len(stages) else 0.0,
                 predicted_apoapsis_alt_km=(predicted_apoapsis - RE) / 1000.0,
                 capture_guidance_active=apo_lock,
+                capture_guidance_start_t_s=capture_guidance_start_t,
                 capture_threshold_alt_km=(capture_threshold - RE) / 1000.0,
                 stage=stages[idx].name if idx < len(stages) else "coast"))
             next_out += dt_out
