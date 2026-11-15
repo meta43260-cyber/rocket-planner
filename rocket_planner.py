@@ -297,11 +297,10 @@ def _capture_radial_authority_limit(speed_ratio,
                                       radial_velocity=0.0):
     """Prioritize tangential speed, with a conditional low-perigee recovery mode.
 
-    Keep the normal 15%-65% schedule while the vehicle is climbing or its
-    predicted perigee is safe. If it is descending on a trajectory whose
-    osculating perigee is below 80 km, temporarily allow up to 90% radial
-    authority so capture guidance can arrest the fall instead of remaining
-    locked to a tangential-speed schedule that cannot recover the trajectory.
+    Keep the normal 15%-65% schedule throughout capture. Do not increase
+    radial authority solely because predicted perigee is low: while tangential
+    speed is far below circular speed, spending most thrust radially starves
+    the velocity component required to establish orbit.
     """
     ratio = float(np.clip(speed_ratio, 0.0, 1.0))
     if ratio < 0.82:
@@ -311,10 +310,10 @@ def _capture_radial_authority_limit(speed_ratio,
     else:
         limit = 0.50 + 0.15 * ((ratio - 0.92) / 0.08)
 
-    if (predicted_periapsis_altitude is not None
-            and float(predicted_periapsis_altitude) < 80_000.0
-            and float(radial_velocity) < 0.0):
-        return max(limit, 0.90)
+    # Do not override the tangential-speed schedule during descent.
+    # A large radial command can consume nearly all upper-stage thrust while
+    # the vehicle is still far below circular speed, making orbital capture
+    # impossible even when propellant remains.
     return limit
 
 
@@ -351,7 +350,7 @@ def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
     required_radial_thrust_accel = (
         desired_net_radial_accel - float(radial_environment_accel)
     )
-    radial_limit = float(np.clip(max_radial_fraction, 0.0, 0.90))
+    radial_limit = float(np.clip(max_radial_fraction, 0.0, 0.65))
     radial_fraction = float(np.clip(
         required_radial_thrust_accel / max(thrust_accel, 1e-6),
         -radial_limit, radial_limit
