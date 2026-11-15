@@ -416,10 +416,14 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             # Include the natural radial acceleration from both gravity
             # and tangential orbital curvature. Using gravity alone would
             # request unnecessary radial thrust near circular speed.
-            tangent_speed = float(np.linalg.norm(
-                v_plane - np.dot(v_plane, up) * up
+            # Curvature is computed in the inertial frame used by the
+            # equations of motion. v_plane is Earth-relative for steering,
+            # so use the inertial state velocity for this magnitude.
+            inertial_velocity = rv[3:6]
+            inertial_tangent_speed = float(np.linalg.norm(
+                inertial_velocity - np.dot(inertial_velocity, up) * up
             ))
-            radial_environment = _radial_environment_accel(rn, tangent_speed)
+            radial_environment = _radial_environment_accel(rn, inertial_tangent_speed)
             return _closed_loop_capture_direction(
                 up, v_plane, target_r, rn, thrust_accel,
                 radial_environment_accel=radial_environment
