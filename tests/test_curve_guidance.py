@@ -106,3 +106,16 @@ def test_boost_core_timeline_rejects_cutoff_outside_generated_phase():
     )
     with pytest.raises(HTTPException):
         _apply_boost_core_timeline(phases, log, row)
+
+
+def test_capture_guidance_engages_before_target_apoapsis():
+    target_radius = rp.RE + 450_000.0
+    threshold = rp._capture_guidance_threshold(target_radius)
+    assert threshold == pytest.approx(rp.RE + 315_000.0)
+    assert threshold < target_radius
+
+
+def test_capture_guidance_has_minimum_altitude_for_low_orbits():
+    target_radius = rp.RE + 40_000.0
+    threshold = rp._capture_guidance_threshold(target_radius)
+    assert threshold == pytest.approx(rp.RE + 50_000.0)
