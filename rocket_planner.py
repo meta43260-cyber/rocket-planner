@@ -271,6 +271,12 @@ def _radial_environment_accel(radius, tangential_speed):
     return tangential_speed ** 2 / radius - MU / radius ** 2
 
 
+def _capture_radial_authority_limit(speed_ratio):
+    """Reserve tangential thrust early, then release radial authority near orbit."""
+    ratio = float(np.clip(speed_ratio, 0.0, 1.0))
+    return 0.35 + 0.30 * float(np.clip((ratio - 0.65) / 0.30, 0.0, 1.0))
+
+
 def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
                                   thrust_accel, tau=300.0,
                                   radial_environment_accel=0.0,
@@ -419,14 +425,16 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             radial_environment = _radial_environment_accel(
                 rn, inertial_tangent_speed
             )
-            # Keep the established radial authority while the vehicle is
-            # still below orbital speed. A low fixed cap prevents the guidance
-            # from allocating enough thrust to oppose gravity during early
-            # capture, as shown by the post-PR-47 VA267 telemetry.
+            circular_speed = np.sqrt(MU / rn)
+            speed_ratio = inertial_tangent_speed / max(circular_speed, 1.0)
+            # Balance the two observed failure modes: 8% radial authority
+            # caused early descent, while a fixed 65% cap starved tangential
+            # acceleration. Ramp from 35% to 65% as circular speed is reached.
+            radial_limit = _capture_radial_authority_limit(speed_ratio)
             return _closed_loop_capture_direction(
                 up, v_plane, target_r, rn, thrust_accel,
                 radial_environment_accel=radial_environment,
-                max_radial_fraction=0.65
+                max_radial_fraction=radial_limit
             )
         return v_plane / nv_plane if nv_plane > 1.0 else up
 
