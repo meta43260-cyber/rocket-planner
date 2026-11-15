@@ -264,6 +264,19 @@ def _capture_guidance_threshold(target_radius, fraction=0.35,
     return RE + max(float(minimum_altitude), target_altitude * float(fraction))
 
 
+def _radial_environment_accel(radius, tangential_speed):
+    """Natural radial acceleration from gravity and orbital curvature.
+
+    For radial-velocity control, the environment term is not gravity alone:
+    tangential velocity contributes the outward curvature term v_t**2/r.
+    Omitting it makes the controller spend thrust opposing gravity even when
+    the vehicle is already moving at (or near) circular speed.
+    """
+    radius = max(float(radius), 1.0)
+    tangential_speed = max(float(tangential_speed), 0.0)
+    return tangential_speed ** 2 / radius - MU / radius ** 2
+
+
 def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
                                   thrust_accel, tau=300.0,
                                   radial_environment_accel=0.0):
@@ -404,10 +417,13 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             # acceleration budget. Without this term the controller treats
             # thrust acceleration as net acceleration and under-commands
             # upward thrust by roughly 9 m/s² throughout orbital ascent.
-            radial_gravity = -MU / (rn * rn)
+            tangent_speed = float(np.linalg.norm(
+                v_plane - np.dot(v_plane, up) * up
+            ))
+            radial_environment = _radial_environment_accel(rn, tangent_speed)
             return _closed_loop_capture_direction(
                 up, v_plane, target_r, rn, thrust_accel,
-                radial_environment_accel=radial_gravity
+                radial_environment_accel=radial_environment
             )
         return v_plane / nv_plane if nv_plane > 1.0 else up
 
