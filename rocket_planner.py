@@ -251,14 +251,15 @@ def auto_ascent_profile(vehicle: Vehicle, mission: Mission) -> Tuple[float, floa
 # ============================================================
 # ASCENT SIMULATION
 # ============================================================
-def _capture_guidance_threshold(target_radius, fraction=0.35,
+def _capture_guidance_threshold(target_radius, fraction=0.20,
                                   minimum_altitude=50_000.0):
-    """Start terminal capture guidance before the predicted apogee reaches target.
+    """Engage tangential-priority capture guidance early in the ascent.
 
-    Aiming purely along-track until the exact target apoapsis is reached can
-    leave an under-energetic vehicle coasting past apogee and descending with
-    no radial-velocity correction.  Engage at a fraction of the target altitude
-    while retaining a 50 km minimum threshold for low-orbit missions.
+    Waiting until a large fraction of the target altitude has been reached
+    leaves a high-TWR vehicle following an almost-vertical gravity turn for
+    too long.  Engage once the predicted apogee clears 20% of the target
+    altitude (with a 50 km floor), so thrust can build inertial tangential
+    speed earlier while the radial command remains tightly limited.
     """
     target_altitude = max(float(target_radius) - RE, 0.0)
     return RE + max(float(minimum_altitude), target_altitude * float(fraction))
