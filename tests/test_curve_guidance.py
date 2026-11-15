@@ -257,3 +257,12 @@ def test_capture_guidance_uses_intermediate_radial_authority_at_low_speed():
     )
     assert direction[0] == pytest.approx(0.35)
     assert direction[1] == pytest.approx((1.0 - 0.35 ** 2) ** 0.5)
+
+
+def test_ascent_guidance_mode_labels_vertical_pitch_gravity_turn_and_capture():
+    mode = rp._ascent_guidance_mode
+    assert mode(2.0, 5.0, 8.0, False, True) == "vertical"
+    assert mode(8.0, 5.0, 8.0, False, True) == "pitch_kick"
+    assert mode(20.0, 5.0, 8.0, False, True) == "gravity_turn"
+    assert mode(20.0, 5.0, 8.0, True, True) == "orbital_capture"
+    assert mode(20.0, 5.0, 8.0, False, False) == "coast"
