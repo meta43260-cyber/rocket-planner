@@ -246,6 +246,32 @@ def auto_ascent_profile(vehicle: Vehicle, mission: Mission) -> Tuple[float, floa
 # ============================================================
 # ASCENT SIMULATION
 # ============================================================
+def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
+                                  thrust_accel, tau=90.0):
+    """Return a normalized in-plane thrust direction with radial-velocity feedback."""
+    up = np.asarray(up, dtype=float)
+    up = up / max(np.linalg.norm(up), 1e-12)
+    v_plane = np.asarray(v_plane, dtype=float)
+    radial_velocity = float(np.dot(v_plane, up))
+    tangent_vec = v_plane - radial_velocity * up
+    tangent_speed = float(np.linalg.norm(tangent_vec))
+    if tangent_speed <= 1.0:
+        return up
+    tangent = tangent_vec / tangent_speed
+    if thrust_accel <= 1e-6:
+        return tangent
+    desired_radial_velocity = float(np.clip(
+        (target_radius - current_radius) / max(tau, 1.0), -120.0, 180.0
+    ))
+    radial_error = desired_radial_velocity - radial_velocity
+    radial_fraction = float(np.clip(
+        radial_error / max(thrust_accel * tau, 1e-6), -0.65, 0.65
+    ))
+    tangent_fraction = np.sqrt(max(0.0, 1.0 - radial_fraction ** 2))
+    direction = tangent_fraction * tangent + radial_fraction * up
+    return direction / max(np.linalg.norm(direction), 1e-12)
+
+
 def simulate_ascent(vehicle: Vehicle, mission: Mission,
                     dt: float = 0.05, dt_out: float = 0.5,
                     max_time: float = 2000.0, verbose: bool = True):
@@ -300,9 +326,10 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             m += stages[i].dry_mass + prop_left[i]
         return m
 
-    def steering(rv, tt, burning):
+    def steering(rv, tt, burning, thrust_accel=0.0):
         rr, vv = rv[0:3], rv[3:6]
-        up = rr / max(np.linalg.norm(rr), 1e-12)
+        rn = max(np.linalg.norm(rr), 1e-12)
+        up = rr / rn
         # Local horizontal direction tangent to the original launch plane.
         # This follows the great-circle plane instead of repeatedly resetting
         # to the same compass bearing at every point on the curved Earth.
@@ -323,11 +350,13 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             p = kick_ang * D2R * f
             return np.cos(p) * up + np.sin(p) * horiz
         if apo_lock:
-            # Circularization steering stays prograde and tangent, but within
-            # the same launch plane.
-            vh = v_plane - np.dot(v_plane, up) * up
-            nvh = np.linalg.norm(vh)
-            return vh / nvh if nvh > 1.0 else horiz
+            # Closed-loop terminal guidance: regulate radial velocity toward
+            # the value needed to approach the target orbital radius. This
+            # avoids the old one-way "horizontal-only" lock, which could leave
+            # a low-thrust upper stage unable to correct a descending flight path.
+            return _closed_loop_capture_direction(
+                up, v_plane, target_r, rn, thrust_accel
+            )
         return v_plane / nv_plane if nv_plane > 1.0 else up
 
     def deriv(rv, mass, thr_vec, alt):
@@ -406,17 +435,18 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
 
         rho, p, T_atm, a_snd = atmosphere(alt)
         mass = current_mass()
-        u = steering(state, t, burning)
-        u = u / max(np.linalg.norm(u), 1e-9)
-
         if burning:
             stg = stages[idx]
             thr = stg.thrust(p, stage_time[idx])
             isp = stg.isp(p)
             mdot = thr / (G0 * isp)
-            thr_vec = thr * u
         else:
-            thr, mdot, thr_vec = 0.0, 0.0, np.zeros(3)
+            thr, mdot = 0.0, 0.0
+
+        thrust_accel = thr / max(mass, 1.0)
+        u = steering(state, t, burning, thrust_accel=thrust_accel)
+        u = u / max(np.linalg.norm(u), 1e-9)
+        thr_vec = thr * u
 
         if t >= next_out - 1e-9:
             v_rel = state[3:6] - np.cross(np.array([0.0, 0.0, OMEGA_E]), state[0:3])

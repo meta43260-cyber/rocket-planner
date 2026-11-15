@@ -157,6 +157,17 @@ def _curve_points(value):
     return [(float(point[0]), float(point[1])) for point in (value or [])] or None
 
 
+def _validate_thrust_curve(points, label):
+    """Allow a zero-thrust ignition point only at t=0; later points must be positive."""
+    if len(points) < 2 or points[0][0] != 0:
+        raise HTTPException(422, f"{label}: thrust curve needs at least two points and must start at 0 seconds.")
+    if any(t < 0 or thrust < 0 or (i > 0 and thrust <= 0)
+           for i, (t, thrust) in enumerate(points)):
+        raise HTTPException(422, f"{label}: only the first thrust-curve point may be zero; times must be non-negative.")
+    if any(points[i][0] >= points[i + 1][0] for i in range(len(points) - 1)):
+        raise HTTPException(422, f"{label}: thrust-curve times must be strictly increasing.")
+
+
 def _visibility_trajectory(ascent, orbit):
     """Join ascent and propagated orbit states on the same launch-relative time axis."""
     frames = [frame for frame in (ascent, orbit) if frame is not None and not frame.empty]
@@ -277,20 +288,11 @@ def simulate(data: SimulationInput):
         raise HTTPException(422, "Stage 1 requires sea-level thrust for liftoff TWR.")
     for i, stage in enumerate(data.stages, start=1):
         if stage.thrust_curve:
-            points = stage.thrust_curve
-            if len(points) < 2 or points[0][0] != 0:
-                raise HTTPException(422, f"Stage {i}: thrust_curve needs at least two points and must start at 0 seconds.")
-            if any(t < 0 or thrust <= 0 for t, thrust in points):
-                raise HTTPException(422, f"Stage {i}: thrust_curve values must be positive and times non-negative.")
-            if any(points[j][0] >= points[j + 1][0] for j in range(len(points) - 1)):
-                raise HTTPException(422, f"Stage {i}: thrust_curve times must be strictly increasing.")
+            _validate_thrust_curve(stage.thrust_curve, f"Stage {i}")
     if data.use_boost:
         for i, booster in enumerate(data.boost_groups, start=1):
-            curve = booster.thrust_curve or []
-            if curve and (len(curve) < 2 or curve[0][0] != 0
-                    or any(t < 0 or thrust <= 0 for t, thrust in curve)
-                    or any(curve[j][0] >= curve[j + 1][0] for j in range(len(curve) - 1))):
-                raise HTTPException(422, f"Booster {i}: thrust_curve must have positive thrust, start at 0, and use strictly increasing times.")
+            if booster.thrust_curve:
+                _validate_thrust_curve(booster.thrust_curve, f"Booster {i}")
     if data.use_timeline:
         if not data.timeline or len(data.timeline.stages) != len(data.stages):
             raise HTTPException(422, "Timeline must contain one event row for every original core stage.")
