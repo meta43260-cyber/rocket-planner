@@ -301,11 +301,11 @@ def test_orbital_energy_diagnostics_returns_nan_circularization_for_escape():
 
 
 
-def test_capture_radial_authority_does_not_override_tangential_priority_on_descent():
+def test_capture_radial_authority_uses_bounded_rescue_during_fast_descent():
     assert rp._capture_radial_authority_limit(
         0.44, predicted_periapsis_altitude=-10_000.0,
         radial_velocity=-155.6
-    ) == pytest.approx(0.15)
+    ) == pytest.approx(0.65)
 
 
 def test_capture_radial_authority_keeps_normal_schedule_while_climbing():
