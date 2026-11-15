@@ -127,3 +127,27 @@ def test_capture_guidance_threshold_is_below_heavy_flight_peak():
     observed_peak_altitude = 212_840.0
     threshold = rp._capture_guidance_threshold(target_radius)
     assert threshold - rp.RE < observed_peak_altitude
+
+
+def test_closed_loop_guidance_does_not_over_brake_early_ascent():
+    up = [1.0, 0.0, 0.0]
+    direction = rp._closed_loop_capture_direction(
+        up, [1000.0, 7000.0, 0.0],
+        rp.RE + 450_000.0, rp.RE + 112_000.0, 5.0
+    )
+    # With a large remaining altitude gap, guidance should make only a
+    # modest correction rather than commanding the old -0.65 radial limit.
+    assert direction[0] > -0.20
+
+
+def test_closed_loop_guidance_reduces_radial_target_near_orbit():
+    up = [1.0, 0.0, 0.0]
+    far = rp._closed_loop_capture_direction(
+        up, [1000.0, 7000.0, 0.0],
+        rp.RE + 450_000.0, rp.RE + 112_000.0, 5.0
+    )
+    near = rp._closed_loop_capture_direction(
+        up, [1000.0, 7000.0, 0.0],
+        rp.RE + 450_000.0, rp.RE + 430_000.0, 5.0
+    )
+    assert near[0] < far[0]
