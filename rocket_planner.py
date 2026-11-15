@@ -273,7 +273,8 @@ def _radial_environment_accel(radius, tangential_speed):
 
 def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
                                   thrust_accel, tau=300.0,
-                                  radial_environment_accel=0.0):
+                                  radial_environment_accel=0.0,
+                                  max_radial_fraction=0.65):
     """Return a normalized in-plane thrust direction with radial gravity compensation.
 
     The radial-velocity controller regulates *net* radial acceleration, not
@@ -303,8 +304,10 @@ def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
     required_radial_thrust_accel = (
         desired_net_radial_accel - float(radial_environment_accel)
     )
+    radial_limit = float(np.clip(max_radial_fraction, 0.0, 0.65))
     radial_fraction = float(np.clip(
-        required_radial_thrust_accel / max(thrust_accel, 1e-6), -0.65, 0.65
+        required_radial_thrust_accel / max(thrust_accel, 1e-6),
+        -radial_limit, radial_limit
     ))
     tangent_fraction = np.sqrt(max(0.0, 1.0 - radial_fraction ** 2))
     direction = tangent_fraction * tangent + radial_fraction * up
@@ -416,9 +419,17 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             radial_environment = _radial_environment_accel(
                 rn, inertial_tangent_speed
             )
+            circular_speed = np.sqrt(MU / rn)
+            speed_ratio = inertial_tangent_speed / max(circular_speed, 1.0)
+            # Prioritize tangential velocity while materially below circular
+            # speed. Gradually release radial authority only near orbital speed.
+            radial_limit = 0.08 + 0.57 * float(np.clip(
+                (speed_ratio - 0.92) / 0.08, 0.0, 1.0
+            ))
             return _closed_loop_capture_direction(
                 up, v_plane, target_r, rn, thrust_accel,
-                radial_environment_accel=radial_environment
+                radial_environment_accel=radial_environment,
+                max_radial_fraction=radial_limit
             )
         return v_plane / nv_plane if nv_plane > 1.0 else up
 
