@@ -239,15 +239,18 @@ def test_capture_guidance_can_use_more_radial_thrust_near_circular_speed():
     assert direction[1] > 0.0
 
 
-def test_capture_radial_authority_balances_low_speed_and_circular_speed():
-    assert rp._capture_radial_authority_limit(0.50) == pytest.approx(0.35)
-    assert rp._capture_radial_authority_limit(0.65) == pytest.approx(0.35)
-    assert rp._capture_radial_authority_limit(0.80) == pytest.approx(0.50)
-    assert rp._capture_radial_authority_limit(0.95) == pytest.approx(0.65)
+def test_capture_radial_authority_prioritizes_tangential_speed_below_82_percent():
+    assert rp._capture_radial_authority_limit(0.50) == pytest.approx(0.15)
+    assert rp._capture_radial_authority_limit(0.65) == pytest.approx(0.15)
+    assert rp._capture_radial_authority_limit(0.80) == pytest.approx(0.15)
+    assert rp._capture_radial_authority_limit(0.82) == pytest.approx(0.15)
+    assert rp._capture_radial_authority_limit(0.87) == pytest.approx(0.325)
+    assert rp._capture_radial_authority_limit(0.92) == pytest.approx(0.50)
+    assert rp._capture_radial_authority_limit(0.96) == pytest.approx(0.575)
     assert rp._capture_radial_authority_limit(1.00) == pytest.approx(0.65)
 
 
-def test_capture_guidance_uses_intermediate_radial_authority_at_low_speed():
+def test_capture_guidance_uses_low_radial_authority_before_circular_speed():
     limit = rp._capture_radial_authority_limit(0.65)
     direction = rp._closed_loop_capture_direction(
         [1.0, 0.0, 0.0], [0.0, 5000.0, 0.0],
@@ -255,8 +258,8 @@ def test_capture_guidance_uses_intermediate_radial_authority_at_low_speed():
         radial_environment_accel=-5.0,
         max_radial_fraction=limit
     )
-    assert direction[0] == pytest.approx(0.35)
-    assert direction[1] == pytest.approx((1.0 - 0.35 ** 2) ** 0.5)
+    assert direction[0] == pytest.approx(0.15)
+    assert direction[1] == pytest.approx((1.0 - 0.15 ** 2) ** 0.5)
 
 
 def test_ascent_guidance_mode_labels_vertical_pitch_gravity_turn_and_capture():
