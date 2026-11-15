@@ -293,9 +293,21 @@ def _ascent_guidance_mode(time_s, vertical_time, kick_duration, capture_active, 
 
 
 def _capture_radial_authority_limit(speed_ratio):
-    """Reserve tangential thrust early, then release radial authority near orbit."""
+    """Prioritize tangential speed until the vehicle approaches circular velocity.
+
+    The previous 35%-65% radial cap allowed the vehicle to build excessive
+    altitude while tangential speed was still far below circular speed. The
+    resulting trajectory could reach a high apogee, then descend deeply before
+    the upper-stage burn completed. Keep radial thrust authority low below
+    82% of local circular speed, ramp it to 50% by 92%, and release the full
+    65% authority only as circular speed is approached.
+    """
     ratio = float(np.clip(speed_ratio, 0.0, 1.0))
-    return 0.35 + 0.30 * float(np.clip((ratio - 0.65) / 0.30, 0.0, 1.0))
+    if ratio < 0.82:
+        return 0.15
+    if ratio < 0.92:
+        return 0.15 + 0.35 * ((ratio - 0.82) / 0.10)
+    return 0.50 + 0.15 * ((ratio - 0.92) / 0.08)
 
 
 def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
