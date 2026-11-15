@@ -92,17 +92,20 @@ def build_boost_phases(core, groups, throttle_pct=100.0,
                     return left[1] + f * (right[1]-left[1])
             return curve[-1][1]
         F_sl = tau * core["thrust_sl"] + sum(
-            g["count"] * (booster_vac(g, tm) + ((g["thrust_sl"] - g["thrust_vac"])
-            if g["thrust_sl"] is not None else 0.0)) for g in burning
+            g["count"] * booster_vac(g, tm) * (
+                g["thrust_sl"] / g["thrust_vac"]
+                if g["thrust_sl"] is not None and g["thrust_vac"] > 0 else 1.0
+            ) for g in burning
         )
         F_vac = tau * core["thrust_vac"] + sum(g["count"] * booster_vac(g, tm) for g in burning)
         phase_curve = [[0.0, tau * core["thrust_vac"] + sum(g["count"] * booster_vac(g, t0) for g in burning)]]
         phase_curve.append([dt, tau * core["thrust_vac"] + sum(g["count"] * booster_vac(g, t1 - 1e-7) for g in burning)])
         w_sl = (tau * core["thrust_sl"] / core["isp_sl"]
                 + sum(
-                    g["count"] * (booster_vac(g, tm) + (g["thrust_sl"] - g["thrust_vac"])
-                    if g["thrust_sl"] is not None else booster_vac(g, tm))
-                    / (g["isp_sl"] if g["isp_sl"] is not None else g["isp_vac"])
+                    g["count"] * booster_vac(g, tm) * (
+                        g["thrust_sl"] / g["thrust_vac"]
+                        if g["thrust_sl"] is not None and g["thrust_vac"] > 0 else 1.0
+                    ) / (g["isp_sl"] if g["isp_sl"] is not None else g["isp_vac"])
                     for g in burning
                 ))
         w_vac = (tau * core["thrust_vac"] / core["isp_vac"]
