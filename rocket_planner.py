@@ -559,6 +559,23 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             thrust_tangential_accel = thrust_accel * thrust_tangential_fraction
             fpa = np.degrees(np.arcsin(np.clip(
                 radial_velocity / max(vr, 1e-6), -1, 1)))
+            # Keep an inertial-frame view alongside the rotating-atmosphere
+            # quantities above. This makes the gravity-turn/pitch history
+            # diagnosable without mixing Earth-relative and orbital velocities.
+            inertial_radial_velocity = float(np.dot(state[3:6], up))
+            inertial_tangent_vec = state[3:6] - inertial_radial_velocity * up
+            inertial_tangent_speed = float(np.linalg.norm(inertial_tangent_vec))
+            inertial_speed = float(np.linalg.norm(state[3:6]))
+            inertial_fpa = np.degrees(np.arcsin(np.clip(
+                inertial_radial_velocity / max(inertial_speed, 1e-6), -1, 1)))
+            inertial_tangent_hat = (
+                inertial_tangent_vec / inertial_tangent_speed
+                if inertial_tangent_speed > 1e-6 else tangent_hat
+            )
+            thrust_inertial_tangential_fraction = float(np.dot(u, inertial_tangent_hat))
+            thrust_pitch_deg = float(np.degrees(np.arctan2(
+                thrust_radial_fraction, thrust_inertial_tangential_fraction
+            )))
             rows.append(dict(
                 t=t, x=state[0], y=state[1], z=state[2],
                 vx=state[3], vy=state[4], vz=state[5],
@@ -566,6 +583,11 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
                 v_inertial=np.linalg.norm(state[3:6]), v_relative=vr,
                 radial_velocity_mps=radial_velocity,
                 tangential_velocity_mps=tangent_speed,
+                inertial_radial_velocity_mps=inertial_radial_velocity,
+                inertial_tangential_velocity_mps=inertial_tangent_speed,
+                inertial_fpa_deg=inertial_fpa,
+                thrust_inertial_tangential_fraction=thrust_inertial_tangential_fraction,
+                thrust_pitch_deg=thrust_pitch_deg,
                 mach=vr / a_snd, q_kPa=0.5 * rho * vr * vr / 1000.0,
                 fpa_deg=fpa, mass=mass, thrust_kN=thr / 1000.0,
                 acc_g=np.linalg.norm(thr_vec) / mass / G0,
