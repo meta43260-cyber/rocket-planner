@@ -107,6 +107,11 @@ class Stage:
             vacuum = float(np.interp(burn_elapsed, times, values))
         if self.thrust_sl is None:
             return vacuum
+        # A time-varying thrust curve is a vacuum curve. Scale it by the
+        # sea-level/vacuum thrust ratio so a zero-thrust ignition point stays
+        # zero; do not apply a constant additive offset to every curve sample.
+        if self.thrust_curve and self.thrust_vac > 0:
+            return vacuum * (1.0 + (self.thrust_sl / self.thrust_vac - 1.0) * f)
         return vacuum + (self.thrust_sl - self.thrust_vac) * f
 
     def isp(self, p: float) -> float:
