@@ -301,26 +301,26 @@ def test_orbital_energy_diagnostics_returns_nan_circularization_for_escape():
 
 
 
-def test_capture_radial_authority_enters_rescue_mode_for_descending_low_perigee():
+def test_capture_radial_authority_does_not_override_tangential_priority_on_descent():
     assert rp._capture_radial_authority_limit(
         0.44, predicted_periapsis_altitude=-10_000.0,
-        radial_velocity=-3.3
-    ) == pytest.approx(0.90)
+        radial_velocity=-155.6
+    ) == pytest.approx(0.15)
 
 
-def test_capture_radial_authority_does_not_enter_rescue_mode_while_climbing():
+def test_capture_radial_authority_keeps_normal_schedule_while_climbing():
     assert rp._capture_radial_authority_limit(
         0.44, predicted_periapsis_altitude=-10_000.0,
         radial_velocity=25.0
     ) == pytest.approx(0.15)
 
 
-def test_capture_guidance_accepts_emergency_radial_authority():
+def test_capture_guidance_caps_radial_authority_even_if_caller_requests_90_percent():
     direction = rp._closed_loop_capture_direction(
         [1.0, 0.0, 0.0], [0.0, 5000.0, 0.0],
         rp.RE + 450_000.0, rp.RE + 200_000.0, 12.0,
         radial_environment_accel=-7.5,
         max_radial_fraction=0.90
     )
-    assert 0.65 < direction[0] <= 0.90
-    assert direction[1] == pytest.approx((1.0 - direction[0] ** 2) ** 0.5)
+    assert direction[0] == pytest.approx(0.65)
+    assert direction[1] == pytest.approx((1.0 - 0.65 ** 2) ** 0.5)
