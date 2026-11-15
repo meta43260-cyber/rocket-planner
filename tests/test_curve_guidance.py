@@ -298,3 +298,29 @@ def test_orbital_energy_diagnostics_returns_nan_circularization_for_escape():
     assert diag["specific_energy_mj_kg"] > 0.0
     assert rp.np.isnan(diag["apoapsis_circularization_dv_mps"])
     assert rp.np.isnan(diag["remaining_stage_dv_mps"])
+
+
+
+def test_capture_radial_authority_enters_rescue_mode_for_descending_low_perigee():
+    assert rp._capture_radial_authority_limit(
+        0.44, predicted_periapsis_altitude=-10_000.0,
+        radial_velocity=-3.3
+    ) == pytest.approx(0.90)
+
+
+def test_capture_radial_authority_does_not_enter_rescue_mode_while_climbing():
+    assert rp._capture_radial_authority_limit(
+        0.44, predicted_periapsis_altitude=-10_000.0,
+        radial_velocity=25.0
+    ) == pytest.approx(0.15)
+
+
+def test_capture_guidance_accepts_emergency_radial_authority():
+    direction = rp._closed_loop_capture_direction(
+        [1.0, 0.0, 0.0], [0.0, 5000.0, 0.0],
+        rp.RE + 450_000.0, rp.RE + 200_000.0, 12.0,
+        radial_environment_accel=-7.5,
+        max_radial_fraction=0.90
+    )
+    assert direction[0] == pytest.approx(0.90)
+    assert direction[1] == pytest.approx((1.0 - 0.90 ** 2) ** 0.5)
