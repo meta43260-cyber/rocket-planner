@@ -265,8 +265,16 @@ def _capture_guidance_threshold(target_radius, fraction=0.35,
 
 
 def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
-                                  thrust_accel, tau=90.0):
-    """Return a normalized in-plane thrust direction with radial-velocity feedback."""
+                                  thrust_accel, tau=300.0):
+    """Return a normalized in-plane thrust direction with gradual radial-velocity feedback.
+
+    A short 90 s response horizon and a 180 m/s radial-speed cap are too
+    restrictive during early ascent: the controller can aggressively pitch
+    away from the climb while the target orbit is still hundreds of kilometres
+    above.  A longer horizon and a higher, distance-scaled radial-speed target
+    preserve ascent energy early and reduce radial speed progressively near
+    the target radius.
+    """
     up = np.asarray(up, dtype=float)
     up = up / max(np.linalg.norm(up), 1e-12)
     v_plane = np.asarray(v_plane, dtype=float)
@@ -279,7 +287,7 @@ def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
     if thrust_accel <= 1e-6:
         return tangent
     desired_radial_velocity = float(np.clip(
-        (target_radius - current_radius) / max(tau, 1.0), -120.0, 180.0
+        (target_radius - current_radius) / max(tau, 1.0), -120.0, 1200.0
     ))
     radial_error = desired_radial_velocity - radial_velocity
     radial_fraction = float(np.clip(
