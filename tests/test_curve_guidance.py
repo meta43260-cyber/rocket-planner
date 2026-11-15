@@ -108,10 +108,10 @@ def test_boost_core_timeline_rejects_cutoff_outside_generated_phase():
         _apply_boost_core_timeline(phases, log, row)
 
 
-def test_capture_guidance_engages_early_for_heavy_payload_ascent():
+def test_capture_guidance_engages_earlier_for_heavy_payload_ascent():
     target_radius = rp.RE + 450_000.0
     threshold = rp._capture_guidance_threshold(target_radius)
-    assert threshold == pytest.approx(rp.RE + 157_500.0)
+    assert threshold == pytest.approx(rp.RE + 90_000.0)
     assert threshold < rp.RE + 212_840.0
     assert threshold < target_radius
 
