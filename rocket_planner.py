@@ -264,6 +264,13 @@ def _capture_guidance_threshold(target_radius, fraction=0.35,
     return RE + max(float(minimum_altitude), target_altitude * float(fraction))
 
 
+def _radial_environment_accel(radius, tangential_speed):
+    """Natural radial acceleration from gravity and orbital curvature."""
+    radius = max(float(radius), 1.0)
+    tangential_speed = max(float(tangential_speed), 0.0)
+    return tangential_speed ** 2 / radius - MU / radius ** 2
+
+
 def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
                                   thrust_accel, tau=300.0,
                                   radial_environment_accel=0.0):
@@ -400,14 +407,18 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             # the value needed to approach the target orbital radius. This
             # avoids the old one-way "horizontal-only" lock, which could leave
             # a low-thrust upper stage unable to correct a descending flight path.
-            # Include the local central-gravity component in the radial
-            # acceleration budget. Without this term the controller treats
-            # thrust acceleration as net acceleration and under-commands
-            # upward thrust by roughly 9 m/s² throughout orbital ascent.
-            radial_gravity = -MU / (rn * rn)
+            # Use inertial tangential speed: the radial equation includes
+            # both central gravity and orbital curvature v_t^2/r.
+            inertial_velocity = rv[3:6]
+            inertial_tangent_speed = float(np.linalg.norm(
+                inertial_velocity - np.dot(inertial_velocity, up) * up
+            ))
+            radial_environment = _radial_environment_accel(
+                rn, inertial_tangent_speed
+            )
             return _closed_loop_capture_direction(
                 up, v_plane, target_r, rn, thrust_accel,
-                radial_environment_accel=radial_gravity
+                radial_environment_accel=radial_environment
             )
         return v_plane / nv_plane if nv_plane > 1.0 else up
 
