@@ -271,6 +271,14 @@ def _radial_environment_accel(radius, tangential_speed):
     return tangential_speed ** 2 / radius - MU / radius ** 2
 
 
+def _project_velocity_to_plane(velocity, plane_normal):
+    """Project an inertial velocity into the fixed launch plane."""
+    velocity = np.asarray(velocity, dtype=float)
+    normal = np.asarray(plane_normal, dtype=float)
+    normal = normal / max(np.linalg.norm(normal), 1e-12)
+    return velocity - np.dot(velocity, normal) * normal
+
+
 def _capture_radial_authority_limit(speed_ratio):
     """Reserve tangential thrust early, then release radial authority near orbit."""
     ratio = float(np.clip(speed_ratio, 0.0, 1.0))
@@ -422,6 +430,12 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             inertial_tangent_speed = float(np.linalg.norm(
                 inertial_velocity - np.dot(inertial_velocity, up) * up
             ))
+            # Orbital capture is an inertial-energy problem. Keep the thrust
+            # tangent aligned with inertial velocity, not the rotating-frame
+            # velocity used for atmospheric flight and drag calculations.
+            inertial_v_plane = _project_velocity_to_plane(
+                inertial_velocity, plane_normal
+            )
             radial_environment = _radial_environment_accel(
                 rn, inertial_tangent_speed
             )
@@ -432,7 +446,7 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             # acceleration. Ramp from 35% to 65% as circular speed is reached.
             radial_limit = _capture_radial_authority_limit(speed_ratio)
             return _closed_loop_capture_direction(
-                up, v_plane, target_r, rn, thrust_accel,
+                up, inertial_v_plane, target_r, rn, thrust_accel,
                 radial_environment_accel=radial_environment,
                 max_radial_fraction=radial_limit
             )
