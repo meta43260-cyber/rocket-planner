@@ -108,10 +108,11 @@ def test_boost_core_timeline_rejects_cutoff_outside_generated_phase():
         _apply_boost_core_timeline(phases, log, row)
 
 
-def test_capture_guidance_engages_before_target_apoapsis():
+def test_capture_guidance_engages_early_for_heavy_payload_ascent():
     target_radius = rp.RE + 450_000.0
     threshold = rp._capture_guidance_threshold(target_radius)
-    assert threshold == pytest.approx(rp.RE + 315_000.0)
+    assert threshold == pytest.approx(rp.RE + 157_500.0)
+    assert threshold < rp.RE + 212_840.0
     assert threshold < target_radius
 
 
@@ -119,3 +120,10 @@ def test_capture_guidance_has_minimum_altitude_for_low_orbits():
     target_radius = rp.RE + 40_000.0
     threshold = rp._capture_guidance_threshold(target_radius)
     assert threshold == pytest.approx(rp.RE + 50_000.0)
+
+
+def test_capture_guidance_threshold_is_below_heavy_flight_peak():
+    target_radius = rp.RE + 450_000.0
+    observed_peak_altitude = 212_840.0
+    threshold = rp._capture_guidance_threshold(target_radius)
+    assert threshold - rp.RE < observed_peak_altitude
