@@ -152,6 +152,40 @@ def records(df, columns=None, stride=1):
     return clean(view.to_dict(orient="records"))
 
 
+def _apply_boost_core_timeline(phases, boost_log, timeline_stage):
+    """Apply the original core-stage cutoff/separation to the final core-only boost phase."""
+    windows = timeline_stage.burns or [
+        TimelineBurn(ignition_t=timeline_stage.ignition_t,
+                     cutoff_t=timeline_stage.cutoff_t)
+    ]
+    if len(windows) != 1:
+        raise HTTPException(
+            422, "With Side Booster enabled, the LLPM timeline must contain one continuous burn."
+        )
+    if not phases or len(phases) != len(boost_log):
+        raise HTTPException(422, "Unable to map LLPM timeline to booster phases.")
+    final_phase = phases[-1]
+    phase_info = boost_log[-1]
+    phase_start = float(phase_info["t0"])
+    phase_end = float(phase_info["t1"])
+    cutoff = float(windows[0].cutoff_t)
+    separation = float(timeline_stage.separation_t)
+    if cutoff <= phase_start or cutoff > phase_end + 1e-6:
+        raise HTTPException(
+            422,
+            f"LLPM cutoff T+{cutoff:g}s is outside the final core phase "
+            f"(T+{phase_start:g} to T+{phase_end:g}s)."
+        )
+    if separation < cutoff:
+        raise HTTPException(422, "LLPM separation cannot precede its cutoff.")
+    # burn_windows are absolute T+ times. Propellant allocated to the full
+    # phase remains aboard until separation; any unburned remainder is dropped
+    # with the core stage at separation_t.
+    final_phase["burn_windows"] = [(phase_start, cutoff)]
+    final_phase["burn_time"] = cutoff - phase_start
+    final_phase["separation_t"] = separation
+
+
 def _curve_points(value):
     """Normalize an optional thrust curve from API input for the engine."""
     return [(float(point[0]), float(point[1])) for point in (value or [])] or None
@@ -334,6 +368,8 @@ def simulate(data: SimulationInput):
             phases, boost_log = bst.build_boost_phases(
                 core, groups, data.boost_throttle, data.solo_throttle, data.boost_auto_burn)
             boost_warnings = bst.validate(core, groups, phases)
+            if data.use_timeline and data.timeline:
+                _apply_boost_core_timeline(phases, boost_log, data.timeline.stages[0])
             stages_cfg = phases + stages_cfg[1:]
 
         fair_t = payload_t = None
