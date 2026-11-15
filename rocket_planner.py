@@ -419,17 +419,14 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             radial_environment = _radial_environment_accel(
                 rn, inertial_tangent_speed
             )
-            circular_speed = np.sqrt(MU / rn)
-            speed_ratio = inertial_tangent_speed / max(circular_speed, 1.0)
-            # Prioritize tangential velocity while materially below circular
-            # speed. Gradually release radial authority only near orbital speed.
-            radial_limit = 0.08 + 0.57 * float(np.clip(
-                (speed_ratio - 0.92) / 0.08, 0.0, 1.0
-            ))
+            # Keep the established radial authority while the vehicle is
+            # still below orbital speed. A low fixed cap prevents the guidance
+            # from allocating enough thrust to oppose gravity during early
+            # capture, as shown by the post-PR-47 VA267 telemetry.
             return _closed_loop_capture_direction(
                 up, v_plane, target_r, rn, thrust_accel,
                 radial_environment_accel=radial_environment,
-                max_radial_fraction=radial_limit
+                max_radial_fraction=0.65
             )
         return v_plane / nv_plane if nv_plane > 1.0 else up
 
