@@ -127,7 +127,7 @@ function formatApiError(detail){
    return loc?loc+": "+msg:msg;
   }
   return String(item);
- }).join("\\n");
+ }).join("\n");
  if(detail&&typeof detail==="object"){
   if(typeof detail.message==="string")return detail.message;
   if(typeof detail.error==="string")return detail.error;
