@@ -304,6 +304,19 @@ def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
     return direction / max(np.linalg.norm(direction), 1e-12)
 
 
+def _has_pending_timeline_events(stages, start_index, current_t):
+    """Whether a timeline-controlled burn or separation is still scheduled."""
+    for stage in stages[max(int(start_index), 0):]:
+        if stage.burn_windows is not None and any(
+                cutoff > current_t + 1e-9
+                for _, cutoff in stage.burn_windows):
+            return True
+        if (stage.separation_t is not None
+                and stage.separation_t > current_t + 1e-9):
+            return True
+    return False
+
+
 def simulate_ascent(vehicle: Vehicle, mission: Mission,
                     dt: float = 0.05, dt_out: float = 0.5,
                     max_time: float = 2000.0, verbose: bool = True):
@@ -470,6 +483,7 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
 
         capture_threshold = _capture_guidance_threshold(target_r)
         predicted_apoapsis = apoapsis_radius(state[0:3], state[3:6])
+        predicted_periapsis = periapsis_radius(state[0:3], state[3:6])
         if not apo_lock and alt > 50000.0:
             if predicted_apoapsis >= capture_threshold:
                 apo_lock = True
@@ -521,6 +535,7 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
                 stage_burn_elapsed_s=stage_time[idx] if idx < len(stages) else 0.0,
                 stage_propellant_remaining_kg=prop_left[idx] if idx < len(stages) else 0.0,
                 predicted_apoapsis_alt_km=(predicted_apoapsis - RE) / 1000.0,
+                predicted_periapsis_alt_km=(predicted_periapsis - RE) / 1000.0,
                 capture_guidance_active=apo_lock,
                 capture_guidance_start_t_s=capture_guidance_start_t,
                 capture_threshold_alt_km=(capture_threshold - RE) / 1000.0,
@@ -540,7 +555,10 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
                     if peri >= RE + mission.target_alt:
                         break
                 elif peri >= RE + mission.target_alt - 5000.0:
-                    break
+                    # Do not finish ascent while the operator's timeline still
+                    # contains a later restart or a scheduled stage separation.
+                    if not _has_pending_timeline_events(stages, idx, t):
+                        break
 
         f_rk = lambda y: deriv(y, mass, thr_vec, alt)
         k1 = f_rk(state)
