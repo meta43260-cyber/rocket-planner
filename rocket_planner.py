@@ -296,12 +296,12 @@ def _ascent_guidance_mode(time_s, vertical_time, kick_duration, capture_active, 
 def _capture_radial_authority_limit(speed_ratio,
                                       predicted_periapsis_altitude=None,
                                       radial_velocity=0.0):
-    """Prioritize tangential speed, with a conditional low-perigee recovery mode.
+    """Prioritize tangential speed, with bounded recovery for a descending low perigee.
 
-    Keep the normal 15%-65% schedule throughout capture. Do not increase
-    radial authority solely because predicted perigee is low: while tangential
-    speed is far below circular speed, spending most thrust radially starves
-    the velocity component required to establish orbit.
+    Keep the normal 15%-65% schedule while climbing or when the predicted
+    perigee is safe. If the vehicle is descending toward a perigee below 80 km,
+    raise the radial-authority ceiling to 65% so guidance can arrest the fall
+    without the 90% radial command that previously starved tangential speed.
     """
     ratio = float(np.clip(speed_ratio, 0.0, 1.0))
     if ratio < 0.82:
@@ -311,10 +311,14 @@ def _capture_radial_authority_limit(speed_ratio,
     else:
         limit = 0.50 + 0.15 * ((ratio - 0.92) / 0.08)
 
-    # Do not override the tangential-speed schedule during descent.
-    # A large radial command can consume nearly all upper-stage thrust while
-    # the vehicle is still far below circular speed, making orbital capture
-    # impossible even when propellant remains.
+    # A low predicted perigee while descending means the vehicle is
+    # falling out of the usable powered-flight corridor. Allow a bounded
+    # radial recovery command, but never exceed the 65% cap enforced by the
+    # closed-loop controller; the remaining thrust stays tangential.
+    if (predicted_periapsis_altitude is not None
+            and float(predicted_periapsis_altitude) < 80_000.0
+            and float(radial_velocity) < 0.0):
+        return max(limit, 0.65)
     return limit
 
 
