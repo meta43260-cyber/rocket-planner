@@ -118,6 +118,23 @@ function drawMap(data,p){
  }catch(err){console.error("Ground track render failed",err);if(mapObj){try{mapObj.remove()}catch(_){}mapObj=null}renderGroundTrackFallback(el,asc,orb,p)}
 }
 function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function formatApiError(detail){
+ if(typeof detail==="string")return detail;
+ if(Array.isArray(detail))return detail.map(item=>{
+  if(item&&typeof item==="object"){
+   const loc=Array.isArray(item.loc)?item.loc.filter(x=>x!=="body").join(" → "):"";
+   const msg=item.msg||item.message||JSON.stringify(item);
+   return loc?loc+": "+msg:msg;
+  }
+  return String(item);
+ }).join("\\n");
+ if(detail&&typeof detail==="object"){
+  if(typeof detail.message==="string")return detail.message;
+  if(typeof detail.error==="string")return detail.error;
+  return JSON.stringify(detail,null,2);
+ }
+ return detail==null?"API error":String(detail);
+}
 function tableRows(tableId,rows,cols){
  const table=$(String(tableId).replace(/^#/,""));
  if(!table){console.error("Result table not found:",tableId);return 0}
@@ -188,7 +205,7 @@ $("mission-form").addEventListener("submit",async ev=>{
  try{stages=JSON.parse($("stages").value);if(!Array.isArray(stages)||!stages.length||stages.length>5)throw Error("Stages ต้องเป็น JSON array จำนวน 1–5 สเตจ");if($("use_boost").checked){boostGroups=JSON.parse($("boost_groups").value||"[]");if(!Array.isArray(boostGroups)||!boostGroups.length||boostGroups.length>4)throw Error("Booster groups ต้องเป็น JSON array จำนวน 1–4 กลุ่ม")}if($("use_timeline").checked){const tStages=JSON.parse($("timeline_stages").value);if(!Array.isArray(tStages))throw Error("Timeline ต้องเป็น JSON array");timeline={stages:tStages,fairing_t:$("fairing_t").value===""?null:n("fairing_t"),payload_t:$("payload_t").value===""?null:n("payload_t")}}}catch(err){$("loading").classList.add("hidden");$("error").textContent="Input error: "+err.message;$("error").classList.remove("hidden");return}
  const launch=$("launch_utc").value;if(!launch){$("loading").classList.add("hidden");$("error").textContent="กรุณาระบุ Launch UTC";$("error").classList.remove("hidden");return}
  const p={stages,payload:n("payload"),fairing_mass:n("fairing_mass"),fairing_alt:n("fairing_alt"),site_lat:n("site_lat"),site_lon:n("site_lon"),site_alt:n("site_alt"),obs_lat:n("obs_lat"),obs_lon:n("obs_lon"),obs_alt:n("obs_alt"),target_alt:n("target_alt"),target_apogee_alt:n("target_apogee_alt"),launch_azimuth_deg:n("launch_azimuth_deg"),mission_type:$("mission_type").value,launch_utc:launch+":00Z",auto_profile:$("auto_profile").checked,vertical_time:n("vertical_time"),kick_angle:n("kick_angle"),kick_duration:n("kick_duration"),min_elevation:n("min_elevation"),timestep:n("timestep"),orbit_count:n("orbit_count"),use_boost:$("use_boost").checked,boost_groups:boostGroups,boost_throttle:n("boost_throttle"),solo_throttle:n("solo_throttle"),boost_auto_burn:$("boost_auto_burn").checked,use_timeline:$("use_timeline").checked,timeline};
- try{const r=await fetch("/api/simulate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});const d=await r.json();if(!r.ok)throw Error(d.detail||"API error");render(d,p)}catch(err){$("loading").classList.add("hidden");$("error").textContent="Simulation error: "+err.message;$("error").classList.remove("hidden")}
+ try{const r=await fetch("/api/simulate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});const raw=await r.text();let d;try{d=raw?JSON.parse(raw):{}}catch(_){d={detail:raw||("HTTP "+r.status)}}if(!r.ok)throw Error(formatApiError(d.detail??d.error??d));render(d,p)}catch(err){console.error("Simulation request failed",err);$("loading").classList.add("hidden");$("error").textContent="Simulation error: "+formatApiError(err.message);$("error").classList.remove("hidden")}
 });
 
 
