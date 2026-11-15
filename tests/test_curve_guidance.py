@@ -152,6 +152,14 @@ def test_closed_loop_guidance_reduces_radial_target_near_orbit():
     )
     assert near[0] < far[0]
 
+def test_inertial_capture_velocity_projection_stays_in_launch_plane():
+    velocity = [120.0, 7000.0, 450.0]
+    plane_normal = [0.0, 0.0, 1.0]
+    projected = rp._project_velocity_to_plane(velocity, plane_normal)
+    assert projected == pytest.approx([120.0, 7000.0, 0.0])
+    assert float(projected @ plane_normal) == pytest.approx(0.0)
+
+
 def test_radial_environment_includes_tangential_curvature():
     radius = rp.RE + 450_000.0
     circular_speed = (rp.MU / radius) ** 0.5
