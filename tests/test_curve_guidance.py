@@ -315,6 +315,20 @@ def test_capture_radial_authority_keeps_normal_schedule_while_climbing():
     ) == pytest.approx(0.15)
 
 
+def test_capture_radial_authority_uses_bounded_rescue_for_descending_low_perigee():
+    assert rp._capture_radial_authority_limit(
+        0.44, predicted_periapsis_altitude=-10_000.0,
+        radial_velocity=-3.1
+    ) == pytest.approx(0.65)
+
+
+def test_capture_radial_authority_does_not_rescue_safe_perigee():
+    assert rp._capture_radial_authority_limit(
+        0.44, predicted_periapsis_altitude=120_000.0,
+        radial_velocity=-100.0
+    ) == pytest.approx(0.15)
+
+
 def test_capture_guidance_caps_radial_authority_even_if_caller_requests_90_percent():
     direction = rp._closed_loop_capture_direction(
         [1.0, 0.0, 0.0], [0.0, 5000.0, 0.0],
