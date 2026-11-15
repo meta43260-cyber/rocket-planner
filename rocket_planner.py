@@ -546,8 +546,27 @@ def coast_and_circularize(state, t_end, target_alt, mission_type="circular",
         return state, t_end, 0.0
     if mission_type == "elliptical":
         return state, t_end, 0.0
-    if apoapsis_radius(state[0:3], state[3:6]) < RE + 120e3:
-        raise ValueError("พลังงานไม่พอเข้าวงโคจร: apoapsis ต่ำกว่า ~120 km")
+    initial_apoapsis = apoapsis_radius(state[0:3], state[3:6])
+    if initial_apoapsis < RE + 120e3:
+        r_vec = state[0:3]
+        v_vec = state[3:6]
+        radius = float(np.linalg.norm(r_vec))
+        speed = float(np.linalg.norm(v_vec))
+        radial_speed = float(np.dot(r_vec, v_vec) / max(radius, 1e-12))
+        tangential_speed = float(np.sqrt(max(speed * speed - radial_speed * radial_speed, 0.0)))
+        specific_energy = float(0.5 * speed * speed - MU / max(radius, 1e-12))
+        altitude_km = (radius - RE) / 1000.0
+        apoapsis_km = (initial_apoapsis - RE) / 1000.0
+        raise ValueError(
+            "พลังงานไม่พอเข้าวงโคจร: apoapsis ต่ำกว่า ~120 km "
+            f"(ค่าที่คำนวณได้ {apoapsis_km:.2f} km; "
+            f"ความสูงเมื่อจบ powered flight {altitude_km:.2f} km; "
+            f"ความเร็ว {speed:.1f} m/s; "
+            f"แนวรัศมี {radial_speed:.1f} m/s; "
+            f"แนวสัมผัส {tangential_speed:.1f} m/s; "
+            f"specific energy {specific_energy / 1e6:.3f} MJ/kg; "
+            f"T+{float(t_end):.1f} s)"
+        )
     y = state.copy()
     t = 0.0
     target_r = RE + target_alt
