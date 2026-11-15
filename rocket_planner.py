@@ -584,6 +584,12 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             ))))
             fpa = np.degrees(np.arcsin(np.clip(
                 radial_velocity / max(vr, 1e-6), -1, 1)))
+            stage_isp = stages[idx].isp(p) if idx < len(stages) else 0.0
+            energy_diag = orbital_energy_diagnostics(
+                state[0:3], inertial_velocity, mass=mass,
+                remaining_propellant=prop_left[idx] if idx < len(stages) else 0.0,
+                isp_s=stage_isp
+            )
             rows.append(dict(
                 t=t, x=state[0], y=state[1], z=state[2],
                 vx=state[3], vy=state[4], vz=state[5],
@@ -605,6 +611,12 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
                 thrust_tangential_accel_mps2=thrust_tangential_accel,
                 stage_burn_elapsed_s=stage_time[idx] if idx < len(stages) else 0.0,
                 stage_propellant_remaining_kg=prop_left[idx] if idx < len(stages) else 0.0,
+                specific_energy_mj_kg=energy_diag["specific_energy_mj_kg"],
+                circular_speed_mps=energy_diag["circular_speed_mps"],
+                tangential_speed_ratio=energy_diag["tangential_speed_ratio"],
+                apoapsis_alt_km_energy=energy_diag["apoapsis_alt_km_energy"],
+                apoapsis_circularization_dv_mps=energy_diag["apoapsis_circularization_dv_mps"],
+                remaining_stage_dv_mps=energy_diag["remaining_stage_dv_mps"],
                 predicted_apoapsis_alt_km=(predicted_apoapsis - RE) / 1000.0,
                 predicted_periapsis_alt_km=(predicted_periapsis - RE) / 1000.0,
                 capture_guidance_active=apo_lock,
@@ -649,6 +661,53 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
               f"v_i={df['v_inertial'].iloc[-1]:.0f} m/s  "
               f"Max-Q={df['q_kPa'].max():.1f} kPa")
     return df, state, t, theta0, (az_r, az_i, v_bonus)
+
+def orbital_energy_diagnostics(r, v, mass=None, remaining_propellant=0.0, isp_s=0.0):
+    """Return inertial orbital-energy and ideal remaining-stage delta-v diagnostics.
+
+    Circularization delta-v is the impulsive tangential burn required at the
+    current two-body apoapsis of the osculating orbit. It is a diagnostic
+    estimate (not a powered-flight guidance command); J2 and finite-burn losses
+    are not included in that scalar estimate.
+    """
+    r = np.asarray(r, dtype=float)
+    v = np.asarray(v, dtype=float)
+    radius = max(float(np.linalg.norm(r)), 1.0)
+    speed = float(np.linalg.norm(v))
+    radial_speed = float(np.dot(r, v) / radius)
+    tangential_speed = float(np.sqrt(max(speed * speed - radial_speed * radial_speed, 0.0)))
+    specific_energy = 0.5 * speed * speed - MU / radius
+    circular_speed = float(np.sqrt(MU / radius))
+    speed_ratio = tangential_speed / max(circular_speed, 1e-9)
+
+    apoapsis_alt_km = float("inf")
+    apoapsis_circularization_dv = float("nan")
+    if specific_energy < 0.0:
+        apoapsis = apoapsis_radius(r, v)
+        if np.isfinite(apoapsis) and apoapsis > 0.0 and apoapsis < 1e11:
+            apoapsis_alt_km = (apoapsis - RE) / 1000.0
+            h = float(np.linalg.norm(np.cross(r, v)))
+            speed_at_apoapsis = h / apoapsis
+            circular_speed_at_apoapsis = np.sqrt(MU / apoapsis)
+            apoapsis_circularization_dv = abs(circular_speed_at_apoapsis - speed_at_apoapsis)
+
+    remaining_dv = float("nan")
+    propellant = max(float(remaining_propellant), 0.0)
+    wet_mass = float(mass) if mass is not None else 0.0
+    isp = float(isp_s)
+    if propellant > 0.0 and wet_mass > propellant and isp > 0.0:
+        dry_mass_after_burn = wet_mass - propellant
+        remaining_dv = G0 * isp * np.log(wet_mass / dry_mass_after_burn)
+
+    return {
+        "specific_energy_mj_kg": specific_energy / 1e6,
+        "circular_speed_mps": circular_speed,
+        "tangential_speed_ratio": speed_ratio,
+        "apoapsis_alt_km_energy": apoapsis_alt_km,
+        "apoapsis_circularization_dv_mps": apoapsis_circularization_dv,
+        "remaining_stage_dv_mps": remaining_dv,
+    }
+
 
 def apoapsis_radius(r, v):
     rn = np.linalg.norm(r)

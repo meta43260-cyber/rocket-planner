@@ -438,6 +438,28 @@ if run:
                                            fair_t=fair_t_val, pay_t=pay_t_val, falt=falt)
         except Exception as e:
             st.error(f"คำนวณไม่สำเร็จ: {e}")
+            if "asc" in locals() and isinstance(asc, pd.DataFrame) and not asc.empty:
+                diag_cols = [
+                    "t", "stage", "alt_km", "guidance_mode",
+                    "inertial_tangential_velocity_mps", "circular_speed_mps",
+                    "tangential_speed_ratio", "specific_energy_mj_kg",
+                    "predicted_periapsis_alt_km", "predicted_apoapsis_alt_km",
+                    "apoapsis_circularization_dv_mps", "remaining_stage_dv_mps",
+                    "stage_propellant_remaining_kg", "thrust_kN",
+                ]
+                diag_cols = [c for c in diag_cols if c in asc.columns]
+                samples = asc.iloc[::20][diag_cols].copy()
+                key_rows = asc.loc[[asc["alt_km"].idxmax(), asc.index[-1]], diag_cols]
+                diagnostics = pd.concat([samples, key_rows]).drop_duplicates(subset=["t"])
+                st.markdown("### Energy / Remaining-Δv diagnostics")
+                st.caption(
+                    "แสดงตัวอย่างทุก 10 วินาที พร้อมจุดความสูงสูงสุดและจุดสุดท้าย "
+                    "ค่า Remaining Δv เป็นค่าทฤษฎีของเชื้อเพลิงสเตจปัจจุบัน "
+                    "สมมติใช้ได้ทั้งหมดที่ ISP ณ เวลานั้น ไม่รวม gravity/drag/steering losses"
+                )
+                st.dataframe(
+                    diagnostics.round(3), use_container_width=True, hide_index=True
+                )
 
 if "res" not in st.session_state:
     st.info("👈 ปรับแต่งจรวดและพิกัด จากนั้นกด คำนวณจำลองการไต่ ในเมนูด้านซ้าย")
@@ -526,6 +548,23 @@ with t1:
                "alt (km)": round(mq.alt_km, 1), "v (m/s)": round(mq.v_relative, 0)})
     st.dataframe(pd.DataFrame(ev).sort_values("T+ (s)"),
                  use_container_width=True, hide_index=True)
+
+    with st.expander("⚡ Energy / Remaining-Δv diagnostics", expanded=False):
+        diag_cols = [
+            "t", "stage", "alt_km", "inertial_tangential_velocity_mps",
+            "circular_speed_mps", "tangential_speed_ratio",
+            "specific_energy_mj_kg", "predicted_periapsis_alt_km",
+            "predicted_apoapsis_alt_km", "apoapsis_circularization_dv_mps",
+            "remaining_stage_dv_mps", "stage_propellant_remaining_kg",
+        ]
+        diag_cols = [col for col in diag_cols if col in asc.columns]
+        diag_sample = asc.iloc[::20][diag_cols].copy()
+        st.caption(
+            "ทุกแถวประมาณ 10 วินาที; Remaining Δv เป็น ideal rocket-equation estimate "
+            "ของ propellant สเตจปัจจุบัน โดยใช้ ISP ณ sample นั้น ไม่รวม gravity, drag "
+            "หรือการสูญเสียจากการบังคับทิศทาง"
+        )
+        st.dataframe(diag_sample.round(3), use_container_width=True, hide_index=True)
 
 with t2:
     ts_, th_ = asc["t"].values, asc["thrust_kN"].values

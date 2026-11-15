@@ -266,3 +266,32 @@ def test_ascent_guidance_mode_labels_vertical_pitch_gravity_turn_and_capture():
     assert mode(20.0, 5.0, 8.0, False, True) == "gravity_turn"
     assert mode(20.0, 5.0, 8.0, True, True) == "orbital_capture"
     assert mode(20.0, 5.0, 8.0, False, False) == "coast"
+
+
+
+def test_orbital_energy_diagnostics_reports_speed_ratio_and_remaining_stage_dv():
+    radius = rp.RE + 400_000.0
+    circular_speed = (rp.MU / radius) ** 0.5
+    mass = 50_000.0
+    propellant = 10_000.0
+    isp = 450.0
+    diag = rp.orbital_energy_diagnostics(
+        [radius, 0.0, 0.0], [0.0, circular_speed * 0.9, 0.0],
+        mass=mass, remaining_propellant=propellant, isp_s=isp
+    )
+    assert diag["tangential_speed_ratio"] == pytest.approx(0.9)
+    assert diag["circular_speed_mps"] == pytest.approx(circular_speed)
+    assert diag["remaining_stage_dv_mps"] == pytest.approx(
+        rp.G0 * isp * __import__("math").log(mass / (mass - propellant))
+    )
+    assert diag["specific_energy_mj_kg"] < 0.0
+    assert diag["apoapsis_circularization_dv_mps"] >= 0.0
+
+
+def test_orbital_energy_diagnostics_returns_nan_circularization_for_escape():
+    diag = rp.orbital_energy_diagnostics(
+        [rp.RE + 200_000.0, 0.0, 0.0], [0.0, 12_000.0, 0.0]
+    )
+    assert diag["specific_energy_mj_kg"] > 0.0
+    assert rp.np.isnan(diag["apoapsis_circularization_dv_mps"])
+    assert rp.np.isnan(diag["remaining_stage_dv_mps"])
