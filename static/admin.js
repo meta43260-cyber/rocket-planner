@@ -72,9 +72,7 @@ function curvePointsFromEditor(box){
 function validCurvePoints(points){
  return points.length>=2&&points[0][0]===0&&points.every((p,i)=>Number.isFinite(p[0])&&Number.isFinite(p[1])&&p[0]>=0&&p[1]>=0&&(i===0||p[1]>0)&&(i===0||p[0]>points[i-1][0]));
 }
-function curveRefresh(box){
- const points=curvePointsFromEditor(box),hidden=box.querySelector("[data-db-field=thrust_curve_json]");
- hidden.value=validCurvePoints(points)?JSON.stringify(points):"";
+function curveShowChart(box,points){
  const svg=box.querySelector("[data-curve-chart]"),w=520,h=170,pad=30;
  if(!points.length){svg.innerHTML='<text x="260" y="85" text-anchor="middle" fill="#9eb1c4" font-size="13">เพิ่มจุดข้อมูลเพื่อแสดงกราฟ</text>';return}
  const maxT=Math.max(1,...points.map(p=>p[0])),maxF=Math.max(1,...points.map(p=>p[1]));
@@ -82,26 +80,64 @@ function curveRefresh(box){
  const path=xy.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
  svg.innerHTML='<path d="M'+pad+' '+(h-pad)+' H'+(w-pad)+' M'+pad+' '+pad+' V'+(h-pad)+'" stroke="#557087" fill="none"/><path d="'+path+'" stroke="#52d6d0" stroke-width="3" fill="none" stroke-linejoin="round"/>'+xy.map(p=>'<circle cx="'+p[0]+'" cy="'+p[1]+'" r="4" fill="#52d6d0"/>').join("")+'<g fill="#9eb1c4" font-size="10"><text x="'+pad+'" y="'+(h-7)+'">0 s</text><text x="'+(w-pad)+'" y="'+(h-7)+'" text-anchor="end">'+maxT+' s</text><text x="4" y="12">'+maxF.toLocaleString()+' kN</text></g>';
 }
+function curveMessage(box,message,ok=false){
+ const el=box.querySelector("[data-curve-message]");el.textContent=message;el.style.color=ok?"#8ce0bd":"#ffc2c8";
+}
+function curveReadJson(box){
+ const raw=box.querySelector("[data-curve-json]").value.trim();if(!raw)return [];
+ const points=JSON.parse(raw);
+ if(!Array.isArray(points)||points.some(p=>!Array.isArray(p)||p.length!==2))throw Error("JSON ต้องเป็น Array ของคู่ [เวลา,แรงขับ] เช่น [[0,0],[0.5,3010]]");
+ return points;
+}
+function curveRefresh(box){
+ const hidden=box.querySelector("[data-db-field=thrust_curve_json]");
+ if(box.dataset.curveMode==="json"){
+  try{const points=curveReadJson(box);
+   if(!points.length){hidden.value="";curveShowChart(box,[]);curveMessage(box,"ยังไม่มีข้อมูล JSON",true);return}
+   if(!validCurvePoints(points))throw Error("ข้อมูลไม่ผ่าน: ต้องเริ่มเวลา 0, มีอย่างน้อย 2 จุด, เวลาเพิ่มขึ้น และจุดหลังจุดแรกมีแรงขับมากกว่า 0");
+   hidden.value=JSON.stringify(points);curveShowChart(box,points);curveMessage(box,"JSON ถูกต้อง · "+points.length+" จุด",true);
+  }catch(e){hidden.value="";curveMessage(box,e.message);curveShowChart(box,[])}
+  return;
+ }
+ const points=curvePointsFromEditor(box),ok=validCurvePoints(points);
+ hidden.value=ok?JSON.stringify(points):"";
+ curveMessage(box,points.length?(ok?"ข้อมูลตารางถูกต้อง · "+points.length+" จุด":"ตรวจสอบเวลาและแรงขับ: ต้องเริ่มที่ 0 s และเวลาต้องเพิ่มขึ้น"):"เพิ่มจุดข้อมูล หรือเปลี่ยนไปวาง JSON",ok||!points.length);
+ curveShowChart(box,ok?points:[]);
+ box.querySelector("[data-curve-json]").value=points.length?JSON.stringify(points,null,2):"";
+}
 function setupCurveEditor(box,initial){
  const body=box.querySelector("[data-curve-rows]");
  const add=(point=[0,1000])=>{
   const tr=document.createElement("tr");tr.setAttribute("data-curve-row","");
-  tr.innerHTML='<td><input data-curve-time type="number" min="0" step="any" value="'+esc(point[0])+'"></td><td><input data-curve-thrust type="number" min="0" step="any" value="'+esc(point[1])+'"></td><td><button type="button" class="curve-remove" data-curve-remove title="ลบจุดนี้">ลบ</button></td>';
-  body.appendChild(tr);
+  tr.innerHTML='<td><input data-curve-time type="number" min="0" step="any" value="'+esc(point[0])+'"></td><td><input data-curve-thrust type="number" min="0" step="any" value="'+esc(point[1])+'"></td><td><button type="button" class="curve-remove" data-curve-remove title="ลบจุดนี้">ลบ</button></td>';body.appendChild(tr);
  };
- (Array.isArray(initial)?initial:[]).forEach(add);
+ const replaceRows=points=>{body.innerHTML="";points.forEach(add)};
+ replaceRows(Array.isArray(initial)?initial:[]);
+ box.querySelectorAll("[data-curve-mode-button]").forEach(button=>button.addEventListener("click",()=>{
+  const next=button.dataset.curveModeButton;
+  if(next==="table"&&box.dataset.curveMode==="json"){
+   try{const points=curveReadJson(box);if(points.length&&!validCurvePoints(points))throw Error("JSON ยังไม่ถูกต้อง จึงสลับเป็นตารางไม่ได้");replaceRows(points)}
+   catch(e){curveMessage(box,e.message);return}
+  }
+  if(next==="json"&&box.dataset.curveMode!=="json"){const points=curvePointsFromEditor(box);box.querySelector("[data-curve-json]").value=points.length?JSON.stringify(points,null,2):""}
+  box.dataset.curveMode=next;
+  box.querySelector("[data-curve-table-panel]").hidden=next!=="table";box.querySelector("[data-curve-json-panel]").hidden=next!=="json";
+  box.querySelectorAll("[data-curve-mode-button]").forEach(b=>{b.setAttribute("aria-pressed",String(b.dataset.curveModeButton===next));b.classList.toggle("active",b.dataset.curveModeButton===next)});
+  curveRefresh(box);
+ }));
  box.querySelector("[data-curve-add]").addEventListener("click",()=>{
   const pts=curvePointsFromEditor(box),last=pts[pts.length-1]||[0,1000];add([last[0]+10,last[1]]);curveRefresh(box);
  });
  body.addEventListener("input",()=>curveRefresh(box));
  body.addEventListener("click",e=>{if(e.target.closest("[data-curve-remove]")){e.target.closest("tr").remove();curveRefresh(box)}});
- body.querySelectorAll(".curve-remove").forEach(b=>b.setAttribute("data-curve-remove",""));
- curveRefresh(box);
+ box.querySelector("[data-curve-json]").addEventListener("input",()=>curveRefresh(box));
+ box.dataset.curveMode="table";curveRefresh(box);
 }
+function curvePointsForSave(box){return box.dataset.curveMode==="json"?curveReadJson(box):curvePointsFromEditor(box)}
 function fillDbChildFields(row={}){
  const kind=$("db-child-type").value;
  const notes=kind==="rocket_stages"?'<p class="note" style="grid-column:1/-1">Stage 1 ต้องมี Thrust SL เพื่อคำนวณ TWR ตอนเริ่มบิน ส่วน ISP SL เว้นได้และจะใช้ ISP vacuum เป็นค่าประมาณในบรรยากาศ</p>':kind==="rocket_boosters"?'<p class="note" style="grid-column:1/-1">Booster: Thrust SL และ ISP SL เว้นได้แยกกัน; ค่าที่ขาดจะใช้ Vacuum เป็นค่าประมาณ</p>':"";
- $("db-child-fields").innerHTML=notes+dbFields[kind].map(([key,label,type])=>type==="json"?'<section class="curve-editor" style="grid-column:1/-1"><div class="curve-head"><strong>Thrust-Time Curve</strong><span>เวลาเผาไหม้สะสม (s) · Thrust vacuum (kN)</span></div><input type="hidden" data-db-field="'+key+'"><div class="table-wrap"><table class="curve-table"><thead><tr><th>เวลา (s)</th><th>แรงขับ (kN)</th><th></th></tr></thead><tbody data-curve-rows></tbody></table></div><div class="admin-actions"><button type="button" class="curve-add" data-curve-add>＋ เพิ่มจุดข้อมูล</button></div><p class="note">เพิ่มจุดตามลำดับเวลา ระบบจะเชื่อมจุดด้วย Linear Interpolation และสร้าง JSON ให้อัตโนมัติ ไม่ต้องเขียนโค้ดเอง จุดแรกที่ 0 วินาทีใส่แรงขับ 0 ได้; จุดถัดไปต้องมากกว่า 0 และเวลาเพิ่มขึ้นทุกจุด</p><svg data-curve-chart viewBox="0 0 520 170" role="img" aria-label="กราฟแรงขับตามเวลา"></svg></section>':'<label>'+esc(label)+'<input data-db-field="'+key+'" type="'+type+'" value="'+esc(row[key]??"")+'" '+(key==="source_url"?'placeholder="https://..."':((kind==="rocket_stages"||kind==="rocket_boosters")&&(key==="thrust_sl_kn"||key==="isp_sl_s")?'placeholder="เว้นว่างได้"':""))+'></label>').join("");
+ $("db-child-fields").innerHTML=notes+dbFields[kind].map(([key,label,type])=>type==="json"?'<section class="curve-editor" data-curve-mode="table" style="grid-column:1/-1"><div class="curve-head"><strong>Thrust-Time Curve</strong><span>เวลาเผาไหม้สะสม (s) · Thrust vacuum (kN)</span></div><input type="hidden" data-db-field="'+key+'"><div class="curve-mode-tabs"><button type="button" data-curve-mode-button="table" class="active" aria-pressed="true">แบบปกติ · ตาราง</button><button type="button" data-curve-mode-button="json" aria-pressed="false">แบบ JSON</button></div><div data-curve-table-panel><div class="table-wrap"><table class="curve-table"><thead><tr><th>เวลา (s)</th><th>แรงขับ (kN)</th><th></th></tr></thead><tbody data-curve-rows></tbody></table></div><div class="admin-actions"><button type="button" class="curve-add" data-curve-add>＋ เพิ่มจุดข้อมูล</button></div></div><div data-curve-json-panel hidden><label class="curve-json-label">วางข้อมูล JSON · [[เวลา,แรงขับ],...]<textarea data-curve-json spellcheck="false" placeholder="[[0,0],[0.5,3010],[1,3400]]"></textarea></label></div><p class="note">ทั้งสองรูปแบบใช้ข้อมูลเดียวกันและคำนวณด้วย Linear Interpolation · จุดแรกเริ่มที่ 0 วินาทีและแรงขับเป็น 0 ได้; จุดถัดไปต้องมีแรงขับมากกว่า 0 และเวลาเพิ่มขึ้นทุกจุด</p><p class="curve-message" data-curve-message aria-live="polite"></p><svg data-curve-chart viewBox="0 0 520 170" role="img" aria-label="กราฟแรงขับตามเวลา"></svg></section>':'<label>'+esc(label)+'<input data-db-field="'+key+'" type="'+type+'" value="'+esc(row[key]??"")+'" '+(key==="source_url"?'placeholder="https://..."':((kind==="rocket_stages"||kind==="rocket_boosters")&&(key==="thrust_sl_kn"||key==="isp_sl_s")?'placeholder="เว้นว่างได้"':""))+'></label>').join("");
  const curveBox=$("db-child-fields").querySelector(".curve-editor");
  if(curveBox)setupCurveEditor(curveBox,row.thrust_curve_json||[]);
 }
@@ -183,7 +219,7 @@ $("db-save-child").addEventListener("click",async()=>{
   const curveBox=$("db-child-fields").querySelector(".curve-editor");
   let points=[];
   if(curveBox){
-   points=curvePointsFromEditor(curveBox);
+   points=curvePointsForSave(curveBox);
    if(points.length&&!validCurvePoints(points))throw Error("Thrust-Time Curve ต้องมีอย่างน้อย 2 จุด เริ่มที่ 0 วินาที; จุดแรกอนุญาตแรงขับ 0 ได้ แต่จุดถัดไปต้องมากกว่า 0 และเวลาเพิ่มขึ้นทุกจุด");
   }
   const payload={};$("db-child-fields").querySelectorAll("[data-db-field]").forEach(el=>{const v=el.value.trim();if(v!=="")payload[el.dataset.dbField]=el.dataset.dbField==="thrust_curve_json"?JSON.parse(v):(el.type==="number"?Number(v):v)});
