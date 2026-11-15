@@ -69,9 +69,12 @@ function curvePointsFromEditor(box){
  ]);
  return points;
 }
+function validCurvePoints(points){
+ return points.length>=2&&points[0][0]===0&&points.every((p,i)=>Number.isFinite(p[0])&&Number.isFinite(p[1])&&p[0]>=0&&p[1]>=0&&(i===0||p[1]>0)&&(i===0||p[0]>points[i-1][0]));
+}
 function curveRefresh(box){
  const points=curvePointsFromEditor(box),hidden=box.querySelector("[data-db-field=thrust_curve_json]");
- hidden.value=points.every(p=>Number.isFinite(p[0])&&Number.isFinite(p[1])&&p[0]>=0&&p[1]>0)?JSON.stringify(points):"";
+ hidden.value=validCurvePoints(points)?JSON.stringify(points):"";
  const svg=box.querySelector("[data-curve-chart]"),w=520,h=170,pad=30;
  if(!points.length){svg.innerHTML='<text x="260" y="85" text-anchor="middle" fill="#9eb1c4" font-size="13">เพิ่มจุดข้อมูลเพื่อแสดงกราฟ</text>';return}
  const maxT=Math.max(1,...points.map(p=>p[0])),maxF=Math.max(1,...points.map(p=>p[1]));
