@@ -40,7 +40,7 @@ class StageInput(BaseModel):
     area: float = Field(gt=0)
     ignition_delay: float = Field(default=0, ge=0, le=100000)
     # Vacuum thrust curve: [[powered_time_s, thrust_kN], ...]
-    thrust_curve: list[tuple[float, float]] | None = Field(default=None, max_length=200)
+    thrust_curve: list[tuple[float, float]] | None = Field(default=None, max_length=1000)
 
 
 class BoosterInput(BaseModel):
@@ -58,7 +58,7 @@ class BoosterInput(BaseModel):
     area: float = Field(gt=0)
     ignite_t: float = Field(default=0, ge=0, le=100000)
     jettison_delay: float = Field(default=2, ge=0, le=300)
-    thrust_curve: list[tuple[float, float]] | None = Field(default=None, max_length=200)
+    thrust_curve: list[tuple[float, float]] | None = Field(default=None, max_length=1000)
 
 
 class TimelineBurn(BaseModel):
