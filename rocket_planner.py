@@ -292,22 +292,30 @@ def _ascent_guidance_mode(time_s, vertical_time, kick_duration, capture_active, 
     return "gravity_turn"
 
 
-def _capture_radial_authority_limit(speed_ratio):
-    """Prioritize tangential speed until the vehicle approaches circular velocity.
+def _capture_radial_authority_limit(speed_ratio,
+                                      predicted_periapsis_altitude=None,
+                                      radial_velocity=0.0):
+    """Prioritize tangential speed, with a conditional low-perigee recovery mode.
 
-    The previous 35%-65% radial cap allowed the vehicle to build excessive
-    altitude while tangential speed was still far below circular speed. The
-    resulting trajectory could reach a high apogee, then descend deeply before
-    the upper-stage burn completed. Keep radial thrust authority low below
-    82% of local circular speed, ramp it to 50% by 92%, and release the full
-    65% authority only as circular speed is approached.
+    Keep the normal 15%-65% schedule while the vehicle is climbing or its
+    predicted perigee is safe. If it is descending on a trajectory whose
+    osculating perigee is below 80 km, temporarily allow up to 90% radial
+    authority so capture guidance can arrest the fall instead of remaining
+    locked to a tangential-speed schedule that cannot recover the trajectory.
     """
     ratio = float(np.clip(speed_ratio, 0.0, 1.0))
     if ratio < 0.82:
-        return 0.15
-    if ratio < 0.92:
-        return 0.15 + 0.35 * ((ratio - 0.82) / 0.10)
-    return 0.50 + 0.15 * ((ratio - 0.92) / 0.08)
+        limit = 0.15
+    elif ratio < 0.92:
+        limit = 0.15 + 0.35 * ((ratio - 0.82) / 0.10)
+    else:
+        limit = 0.50 + 0.15 * ((ratio - 0.92) / 0.08)
+
+    if (predicted_periapsis_altitude is not None
+            and float(predicted_periapsis_altitude) < 80_000.0
+            and float(radial_velocity) < 0.0):
+        return max(limit, 0.90)
+    return limit
 
 
 def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
@@ -343,7 +351,7 @@ def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
     required_radial_thrust_accel = (
         desired_net_radial_accel - float(radial_environment_accel)
     )
-    radial_limit = float(np.clip(max_radial_fraction, 0.0, 0.65))
+    radial_limit = float(np.clip(max_radial_fraction, 0.0, 0.90))
     radial_fraction = float(np.clip(
         required_radial_thrust_accel / max(thrust_accel, 1e-6),
         -radial_limit, radial_limit
@@ -469,7 +477,12 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             # Balance the two observed failure modes: 8% radial authority
             # caused early descent, while a fixed 65% cap starved tangential
             # acceleration. Ramp from 35% to 65% as circular speed is reached.
-            radial_limit = _capture_radial_authority_limit(speed_ratio)
+            inertial_radial_velocity = float(np.dot(inertial_velocity, up))
+            radial_limit = _capture_radial_authority_limit(
+                speed_ratio,
+                predicted_periapsis_altitude=predicted_periapsis - RE,
+                radial_velocity=inertial_radial_velocity
+            )
             return _closed_loop_capture_direction(
                 up, inertial_v_plane, target_r, rn, thrust_accel,
                 radial_environment_accel=radial_environment,
