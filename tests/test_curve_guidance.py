@@ -33,9 +33,9 @@ def test_closed_loop_guidance_corrects_downward_velocity():
     target_radius = rp.RE + 400_000.0
     current_radius = rp.RE + 200_000.0
     level = rp._closed_loop_capture_direction(
-        up, [0.0, 7000.0, 0.0], target_radius, current_radius, 3.0
+        up, [0.0, 7000.0, 0.0], target_radius, current_radius, 5.0
     )
     descending = rp._closed_loop_capture_direction(
-        up, [-250.0, 7000.0, 0.0], target_radius, current_radius, 3.0
+        up, [-50.0, 7000.0, 0.0], target_radius, current_radius, 5.0
     )
     assert descending[0] > level[0]
