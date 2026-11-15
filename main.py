@@ -436,10 +436,26 @@ def simulate(data: SimulationInput):
         )
         if ascent.empty:
             raise ValueError("The ascent simulation returned no trajectory points.")
-        orbit_state, t_insert, delta_v = rp.coast_and_circularize(
-            state, t_end, mission.target_alt,
-            mission_type=data.mission_type, verbose=False
-        )
+        try:
+            orbit_state, t_insert, delta_v = rp.coast_and_circularize(
+                state, t_end, mission.target_alt,
+                mission_type=data.mission_type, verbose=False
+            )
+        except ValueError as exc:
+            if "apoapsis ต่ำกว่า" not in str(exc):
+                raise
+            last = ascent.iloc[-1]
+            peak = ascent.loc[ascent["alt_km"].idxmax()]
+            detail = (
+                f"; last trajectory sample: stage={last.get('stage', 'unknown')}, "
+                f"thrust={float(last.get('thrust_kN', 0.0)):.2f} kN, "
+                f"mass={float(last.get('mass', 0.0)):.1f} kg, "
+                f"altitude={float(last.get('alt_km', 0.0)):.2f} km, "
+                f"vertical_fpa={float(last.get('fpa_deg', 0.0)):.2f} deg; "
+                f"maximum altitude={float(peak.get('alt_km', 0.0)):.2f} km "
+                f"at T+{float(peak.get('t', 0.0)):.1f} s"
+            )
+            raise ValueError(f"{exc}{detail}") from exc
         elements = rp.orbital_elements(orbit_state[0:3], orbit_state[3:6])
         if elements["e"] >= 1.0 or not math.isfinite(elements["period_min"]):
             duration = 6 * 3600.0
