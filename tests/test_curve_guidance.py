@@ -206,3 +206,26 @@ def test_periapsis_diagnostic_identifies_suborbital_peak():
     state_v = [0.0, speed, 0.0]
     periapsis_alt = rp.periapsis_radius(state_r, state_v) - rp.RE
     assert periapsis_alt / 1000.0 == pytest.approx(-2453.0, abs=2.0)
+
+
+
+def test_capture_guidance_limits_radial_thrust_when_tangential_speed_is_low():
+    direction = rp._closed_loop_capture_direction(
+        [1.0, 0.0, 0.0], [0.0, 5000.0, 0.0],
+        rp.RE + 450_000.0, rp.RE + 450_000.0, 4.0,
+        radial_environment_accel=-5.0,
+        max_radial_fraction=0.08
+    )
+    assert direction[0] <= 0.08 + 1e-12
+    assert direction[1] >= (1.0 - 0.08 ** 2) ** 0.5 - 1e-12
+
+
+def test_capture_guidance_can_use_more_radial_thrust_near_circular_speed():
+    direction = rp._closed_loop_capture_direction(
+        [1.0, 0.0, 0.0], [0.0, 7600.0, 0.0],
+        rp.RE + 450_000.0, rp.RE + 450_000.0, 4.0,
+        radial_environment_accel=-0.1,
+        max_radial_fraction=0.65
+    )
+    assert direction[0] <= 0.65 + 1e-12
+    assert direction[1] > 0.0
