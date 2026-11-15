@@ -266,7 +266,7 @@ def _capture_guidance_threshold(target_radius, fraction=0.35,
 
 def _closed_loop_capture_direction(up, v_plane, target_radius, current_radius,
                                   thrust_accel, tau=300.0,
-                                  radial_environment_accel=-9.5):
+                                  radial_environment_accel=0.0):
     """Return a normalized in-plane thrust direction with radial gravity compensation.
 
     The radial-velocity controller regulates *net* radial acceleration, not
