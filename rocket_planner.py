@@ -246,9 +246,14 @@ def _launch_eci_position(site_lat_deg, site_lon_deg, site_alt_m, launch_jd):
 def launch_azimuth_for_inclination(site_lat_deg, preferred_azimuth_deg,
                                    target_inclination_deg):
     """Choose the reachable launch heading nearest the preference for an inclination."""
-    latitude = float(site_lat_deg) * D2R
+    # Use geocentric latitude because the ascent engine defines its local
+    # orbital plane from the geocentric radius vector, not the geodetic normal.
+    site_ecef = geodetic_to_ecef(float(site_lat_deg), 0.0, 0.0)
+    geocentric_latitude = np.arctan2(
+        site_ecef[2], np.hypot(site_ecef[0], site_ecef[1])
+    )
     inclination = float(target_inclination_deg) * D2R
-    cos_lat = np.cos(latitude)
+    cos_lat = np.cos(geocentric_latitude)
     if abs(cos_lat) < 1e-10:
         raise ValueError("A launch site at the geographic pole cannot select an orbital inclination by azimuth.")
     sin_az = np.cos(inclination) / cos_lat
@@ -729,7 +734,8 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             energy = 0.5 * float(np.dot(v_now, v_now)) - MU / np.linalg.norm(r_now)
             if mission.mission_type == "escape":
                 target_energy = max(float(mission.target_c3_km2_s2), 0.0) * 500_000.0
-                if energy >= target_energy:
+                if (energy >= target_energy
+                        and not _has_pending_timeline_events(stages, idx, t)):
                     break
             elif energy >= 0.0:
                 break
