@@ -92,7 +92,7 @@ class SimulationInput(BaseModel):
     obs_lat: float = Field(ge=-90, le=90)
     obs_lon: float = Field(ge=-180, le=180)
     obs_alt: float = Field(default=0, ge=-500, le=5000)
-    target_alt: float = Field(default=550, ge=120, le=1000000,
+    target_alt: float = Field(default=550, ge=120, le=100000,
                               description="Target orbit altitude or elliptical perigee, km")
     target_apogee_alt: float = Field(default=35786, ge=120, le=1000000)
     launch_azimuth_deg: float = Field(default=75.3, ge=0, le=360, description="Preferred Earth-fixed launch azimuth clockwise from true north")
@@ -459,9 +459,15 @@ def simulate(data: SimulationInput):
         if ascent.empty:
             raise ValueError("The ascent simulation returned no trajectory points.")
         try:
+            circular_period_s = 2.0 * math.pi * math.sqrt(
+                (rp.RE + mission.target_alt) ** 3 / rp.MU
+            )
+            circular_coast_limit_s = max(28_800.0, 0.55 * circular_period_s)
             orbit_state, t_insert, delta_v = rp.coast_and_circularize(
                 state, t_end, mission.target_alt,
-                mission_type=data.mission_type, verbose=False
+                mission_type=data.mission_type,
+                max_coast=circular_coast_limit_s,
+                verbose=False
             )
         except ValueError as exc:
             if "apoapsis ต่ำกว่า" not in str(exc):
