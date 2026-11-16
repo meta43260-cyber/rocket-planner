@@ -146,6 +146,7 @@ class Mission:
     kick_duration: float = 14.0
     mission_type: str = "circular"
     target_apogee_alt: float = 500e3
+    target_c3_km2_s2: float = 0.0
     auto_profile: bool = False
 
 # ============================================================
@@ -232,6 +233,66 @@ def launch_azimuth(site_lat_deg, azimuth_deg, target_alt):
     v_north_inertial = v_ref * np.cos(az)
     az_i = np.arctan2(v_east_inertial, v_north_inertial)
     return az_r, (az_i * R2D) % 360.0, v_earth * np.sin(az)
+
+
+def _launch_eci_position(site_lat_deg, site_lon_deg, site_alt_m, launch_jd):
+    ecef = geodetic_to_ecef(site_lat_deg, site_lon_deg, site_alt_m)
+    theta = gmst(launch_jd)
+    c, s = np.cos(theta), np.sin(theta)
+    return np.array([c * ecef[0] - s * ecef[1],
+                     s * ecef[0] + c * ecef[1], ecef[2]])
+
+
+def launch_azimuth_for_inclination(site_lat_deg, preferred_azimuth_deg,
+                                   target_inclination_deg):
+    """Choose the reachable launch heading nearest the preference for an inclination."""
+    latitude = float(site_lat_deg) * D2R
+    inclination = float(target_inclination_deg) * D2R
+    cos_lat = np.cos(latitude)
+    if abs(cos_lat) < 1e-10:
+        raise ValueError("A launch site at the geographic pole cannot select an orbital inclination by azimuth.")
+    sin_az = np.cos(inclination) / cos_lat
+    if abs(sin_az) > 1.0 + 1e-10:
+        minimum = abs(float(site_lat_deg))
+        raise ValueError(
+            f"Target inclination {target_inclination_deg:.2f}° is unreachable from "
+            f"latitude {site_lat_deg:.2f}°; minimum direct inclination is {minimum:.2f}°."
+        )
+    sin_az = float(np.clip(sin_az, -1.0, 1.0))
+    first = np.degrees(np.arcsin(sin_az)) % 360.0
+    candidates = [first, (180.0 - first) % 360.0]
+    preferred = float(preferred_azimuth_deg) % 360.0
+    def separation(value):
+        return abs((value - preferred + 180.0) % 360.0 - 180.0)
+    return min(candidates, key=separation)
+
+
+def launch_azimuth_for_plane(site_lat_deg, site_lon_deg, site_alt_m,
+                             launch_jd, inclination_deg, raan_deg):
+    """Return the compass heading for a requested inertial orbital plane.
+
+    A direct launch can only enter a plane that contains the launch position
+    at the selected epoch. Incompatible RAAN/epoch/site combinations are
+    rejected rather than silently producing a different orbital plane.
+    """
+    position = _launch_eci_position(site_lat_deg, site_lon_deg, site_alt_m, launch_jd)
+    up = position / np.linalg.norm(position)
+    inc, raan = float(inclination_deg) * D2R, float(raan_deg) * D2R
+    normal = np.array([np.sin(inc) * np.sin(raan),
+                       -np.sin(inc) * np.cos(raan), np.cos(inc)])
+    plane_error = abs(float(np.dot(normal, up)))
+    if plane_error > 1e-6:
+        raise ValueError(
+            "Requested inclination/RAAN plane does not pass through the launch site "
+            "at this launch epoch. Change launch time, RAAN, or launch site."
+        )
+    velocity_direction = np.cross(normal, up)
+    east, north, _ = enu_basis(position)
+    return float(np.degrees(np.arctan2(
+        np.dot(velocity_direction, east),
+        np.dot(velocity_direction, north)
+    )) % 360.0)
+
 
 # ============================================================
 # AUTO ASCENT PROFILE  (ใหม่ — แก้ปัญหาไม่รู้โปรไฟล์การไต่)
@@ -457,6 +518,14 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             p = kick_ang * D2R * f
             return np.cos(p) * up + np.sin(p) * horiz
         if apo_lock:
+            if mission.mission_type == "escape":
+                # For a hyperbolic departure, maximize Earth-relative orbital
+                # energy by thrusting prograde in the requested launch plane.
+                inertial_v_plane = _project_velocity_to_plane(
+                    rv[3:6], plane_normal
+                )
+                speed = float(np.linalg.norm(inertial_v_plane))
+                return (inertial_v_plane / speed) if speed > 1e-6 else horiz
             # Closed-loop terminal guidance: regulate radial velocity toward
             # the value needed to approach the target orbital radius. This
             # avoids the old one-way "horizontal-only" lock, which could leave
@@ -658,7 +727,11 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
         if burning and upper and alt > 60000.0:
             r_now, v_now = state[0:3], state[3:6]
             energy = 0.5 * float(np.dot(v_now, v_now)) - MU / np.linalg.norm(r_now)
-            if energy >= 0.0:
+            if mission.mission_type == "escape":
+                target_energy = max(float(mission.target_c3_km2_s2), 0.0) * 500_000.0
+                if energy >= target_energy:
+                    break
+            elif energy >= 0.0:
                 break
             apo = apoapsis_radius(r_now, v_now)
             if apo >= target_r:
@@ -874,6 +947,14 @@ def orbital_elements(r, v) -> Dict[str, float]:
         ta = np.arctan2(np.dot(r, np.cross(h, n)) / hn,
                         np.dot(r, n)) if nn > 1e-9 else 0.0
 
+    if abs(energy) < 1e-3:
+        conic_type = "parabolic"
+    elif energy < 0.0:
+        conic_type = "elliptic"
+    else:
+        conic_type = "hyperbolic"
+    c3_km2_s2 = 2.0 * energy / 1e6
+    v_inf_km_s = np.sqrt(max(2.0 * energy, 0.0)) / 1000.0
     return dict(
         a_km=a / 1000.0, e=e, inc_deg=float(inc * R2D),
         raan_deg=float(raan * R2D % 360.0),
@@ -882,7 +963,11 @@ def orbital_elements(r, v) -> Dict[str, float]:
         perigee_km=(perigee_r - RE) / 1000.0,
         apogee_km=apogee_km,
         period_min=period_min, v_now_mps=float(vn),
-        alt_now_km=(rn - RE) / 1000.0)
+        alt_now_km=(rn - RE) / 1000.0,
+        specific_energy_mj_kg=energy / 1e6,
+        c3_km2_s2=c3_km2_s2,
+        v_inf_km_s=float(v_inf_km_s),
+        conic_type=conic_type)
 
 # ============================================================
 # ORBIT PROPAGATION (ground track)
