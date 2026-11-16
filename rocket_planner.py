@@ -146,8 +146,8 @@ class Mission:
     kick_duration: float = 14.0
     mission_type: str = "circular"
     target_apogee_alt: float = 500e3
-    target_c3_km2_s2: float = 0.0
     auto_profile: bool = False
+    target_c3_km2_s2: float = 0.0
 
 # ============================================================
 # เวลา / พิกัด
