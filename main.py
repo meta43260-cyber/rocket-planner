@@ -504,6 +504,13 @@ def simulate(data: SimulationInput):
                     f"required C3={data.target_c3_km2_s2:.4f} km²/s²."
                 )
             target_orbit_met = actual_c3 + 1e-6 >= data.target_c3_km2_s2
+            if data.target_inclination_deg is not None:
+                target_orbit_met = target_orbit_met and (
+                    abs(elements["inc_deg"] - data.target_inclination_deg) <= 0.5
+                )
+            if data.target_raan_deg is not None:
+                raan_error = abs((elements["raan_deg"] - data.target_raan_deg + 180.0) % 360.0 - 180.0)
+                target_orbit_met = target_orbit_met and raan_error <= 0.5
             duration = data.trajectory_duration_s
         elif elements["e"] >= 1.0 or not math.isfinite(elements["period_min"]):
             raise ValueError(
