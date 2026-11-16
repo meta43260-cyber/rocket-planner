@@ -3,7 +3,9 @@ let lastResult=null,lastPayload=null,mapObj=null;
 function setVal(id,v){if(v!==undefined&&v!==null&&$(id))$(id).value=v}
 function stageTimeline(stages){let t=0;return stages.map(s=>{const ign=t+Number(s.ignition_delay||0),cut=ign+Number(s.burn_time),sep=cut+2;t=sep;return {ignition_t:ign,cutoff_t:cut,separation_t:sep,burns:[{ignition_t:ign,cutoff_t:cut}]}})}
 function applyConfig(p){
- for(const k of ["payload","fairing_mass","fairing_alt","site_lat","site_lon","site_alt","target_alt","target_apogee_alt","launch_azimuth_deg","mission_type","vertical_time","kick_angle","kick_duration"])setVal(k,p[k]);
+ for(const k of ["payload","fairing_mass","fairing_alt","site_lat","site_lon","site_alt","target_alt","target_apogee_alt","launch_azimuth_deg","mission_type","vertical_time","kick_angle","kick_duration","target_c3_km2_s2","trajectory_duration_s"])setVal(k,p[k]);
+ setVal("target_inclination_deg",p.target_inclination_deg??"");
+ setVal("target_raan_deg",p.target_raan_deg??"");
  $("stages").value=JSON.stringify(p.stages||[],null,2);
  $("boost_groups").value=JSON.stringify(p.boost_groups||[],null,2);
  $("use_boost").checked=!!p.use_boost;
@@ -191,7 +193,7 @@ function render(data,p){
 
   const table=sampleRows(vis,10);tableRows("look-table",table,[r=>safe(r.t,1),r=>safe(r.az_deg,2),r=>safe(r.el_deg,2),r=>safe(r.range_km,2),r=>safe(r.alt_km,2),r=>safe(r.angular_rate,3)]);
  const entries=[["Conic type",e.conic_type,""],["Semi-major axis",e.a_km,"km"],["Eccentricity",e.e,""],["Specific orbital energy",e.specific_energy_mj_kg,"MJ/kg"],["C3",e.c3_km2_s2,"km²/s²"],["Hyperbolic excess speed",e.v_inf_km_s,"km/s"],["Inclination",e.inc_deg,"°"],["RAAN",e.raan_deg,"°"],["Argument of periapsis",e.argp_deg,"°"],["True anomaly",e.ta_deg,"°"],["Perigee",e.perigee_km,"km"],["Apogee",e.apogee_km,"km"],["Orbital period",e.period_min,"min"],["Earth rotation bonus",s.earth_rotation_bonus_mps,"m/s"]];
- $("elements").innerHTML=entries.map(([k,x,u])=>`<div class="element"><span>${k}</span><b>${x===null?"—":safe(x,2)+u}</b></div>`).join("");
+ $("elements").innerHTML=entries.map(([k,x,u])=>`<div class="element"><span>${k}</span><b>${x===null||x===undefined?"—":(typeof x==="number"?safe(x,2)+u:escapeHtml(x))}</b></div>`).join("");
 }
 function buildKml(data){const placemark=(name,pts,color)=>{const lines=splitTrack(pts.map(x=>[x.lat,x.lon,x.alt_km*1000]));return lines.map(seg=>`<Placemark><name>${name}</name><Style><LineStyle><color>${color}</color><width>3</width></LineStyle></Style><LineString><altitudeMode>absolute</altitudeMode><coordinates>${seg.map(x=>x[1].toFixed(6)+","+x[0].toFixed(6)+","+x[2].toFixed(1)).join(" ")}</coordinates></LineString></Placemark>`).join("")};return '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Rocket Planner trajectory</name>'+placemark("Ascent",data.ascent,"ff598bff")+placemark("Orbit",data.orbit,"ffd0d653")+"</Document></kml>"}
 $("export-ascent").addEventListener("click",()=>lastResult&&download("ascent.csv",csv(lastResult.ascent),"text/csv"));
