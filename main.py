@@ -92,9 +92,15 @@ class SimulationInput(BaseModel):
     obs_lat: float = Field(ge=-90, le=90)
     obs_lon: float = Field(ge=-180, le=180)
     obs_alt: float = Field(default=0, ge=-500, le=5000)
-    target_alt: float = Field(default=550, ge=120, le=2000)
+    target_alt: float = Field(default=550, ge=120, le=100000,
+                              description="Target orbit altitude or elliptical perigee, km")
     target_apogee_alt: float = Field(default=35786, ge=120, le=1000000)
-    launch_azimuth_deg: float = Field(default=75.3, ge=0, le=360, description="Earth-fixed launch azimuth clockwise from true north")
+    launch_azimuth_deg: float = Field(default=75.3, ge=0, le=360, description="Preferred Earth-fixed launch azimuth clockwise from true north")
+    target_inclination_deg: float | None = Field(default=None, ge=0, le=180)
+    target_raan_deg: float | None = Field(default=None, ge=0, lt=360)
+    target_c3_km2_s2: float = Field(default=0.0, ge=0, le=1000,
+                                    description="Required Earth-relative characteristic energy for escape")
+    trajectory_duration_s: float = Field(default=86400, ge=3600, le=2592000)
     mission_type: str = "circular"
     launch_utc: datetime
     auto_profile: bool = True
@@ -314,6 +320,10 @@ def health():
 def simulate(data: SimulationInput):
     if data.mission_type not in ("circular", "elliptical", "escape"):
         raise HTTPException(422, "mission_type must be circular, elliptical or escape")
+    if data.mission_type == "elliptical" and data.target_apogee_alt <= data.target_alt:
+        raise HTTPException(422, "Elliptical orbit requires apogee altitude greater than perigee altitude.")
+    if data.target_raan_deg is not None and data.target_inclination_deg is None:
+        raise HTTPException(422, "Set target inclination when specifying a target RAAN.")
     if data.use_boost and not data.boost_groups:
         raise HTTPException(422, "Add at least one booster group or disable Side Booster.")
     # Liftoff TWR needs a sea-level thrust datum. ISP SL may be omitted,
@@ -356,6 +366,17 @@ def simulate(data: SimulationInput):
             raise HTTPException(422, "Payload deployment cannot precede the final stage's last engine cutoff.")
     try:
         launch_jd = jd_from_datetime(data.launch_utc)
+        effective_launch_azimuth = data.launch_azimuth_deg
+        if data.target_raan_deg is not None:
+            effective_launch_azimuth = rp.launch_azimuth_for_plane(
+                data.site_lat, data.site_lon, data.site_alt, launch_jd,
+                data.target_inclination_deg, data.target_raan_deg
+            )
+        elif data.target_inclination_deg is not None:
+            effective_launch_azimuth = rp.launch_azimuth_for_inclination(
+                data.site_lat, data.launch_azimuth_deg,
+                data.target_inclination_deg
+            )
         original = [s.model_dump() if hasattr(s, "model_dump") else s.dict() for s in data.stages]
         stages_cfg = [dict(s) for s in original]
         boost_log = []
@@ -422,12 +443,13 @@ def simulate(data: SimulationInput):
         )
         mission = rp.Mission(
             site_lat=data.site_lat, site_lon=data.site_lon, site_alt=data.site_alt,
-            target_alt=data.target_alt * 1000, launch_azimuth_deg=data.launch_azimuth_deg,
+            target_alt=data.target_alt * 1000, launch_azimuth_deg=effective_launch_azimuth,
             launch_jd=launch_jd, vertical_time=data.vertical_time,
             kick_angle=data.kick_angle, kick_duration=data.kick_duration,
             mission_type=data.mission_type,
             target_apogee_alt=(data.target_apogee_alt if data.mission_type != "circular"
                                else data.target_alt) * 1000,
+            target_c3_km2_s2=data.target_c3_km2_s2,
             auto_profile=data.auto_profile
         )
         ascent, state, t_end, theta0, azimuth = rp.simulate_ascent(
@@ -437,9 +459,15 @@ def simulate(data: SimulationInput):
         if ascent.empty:
             raise ValueError("The ascent simulation returned no trajectory points.")
         try:
+            circular_period_s = 2.0 * math.pi * math.sqrt(
+                (rp.RE + mission.target_alt) ** 3 / rp.MU
+            )
+            circular_coast_limit_s = max(28_800.0, 0.55 * circular_period_s)
             orbit_state, t_insert, delta_v = rp.coast_and_circularize(
                 state, t_end, mission.target_alt,
-                mission_type=data.mission_type, verbose=False
+                mission_type=data.mission_type,
+                max_coast=circular_coast_limit_s,
+                verbose=False
             )
         except ValueError as exc:
             if "apoapsis ต่ำกว่า" not in str(exc):
@@ -472,9 +500,48 @@ def simulate(data: SimulationInput):
             )
             raise ValueError(f"{exc}{detail}") from exc
         elements = rp.orbital_elements(orbit_state[0:3], orbit_state[3:6])
-        if elements["e"] >= 1.0 or not math.isfinite(elements["period_min"]):
-            duration = 6 * 3600.0
+        target_orbit_met = True
+        if data.mission_type == "escape":
+            actual_c3 = float(elements["c3_km2_s2"])
+            if actual_c3 + 1e-6 < data.target_c3_km2_s2:
+                raise ValueError(
+                    "Escape target not reached: "
+                    f"actual C3={actual_c3:.4f} km²/s², "
+                    f"required C3={data.target_c3_km2_s2:.4f} km²/s²."
+                )
+            target_orbit_met = actual_c3 + 1e-6 >= data.target_c3_km2_s2
+            if data.target_inclination_deg is not None:
+                target_orbit_met = target_orbit_met and (
+                    abs(elements["inc_deg"] - data.target_inclination_deg) <= 0.5
+                )
+            if data.target_raan_deg is not None:
+                raan_error = abs((elements["raan_deg"] - data.target_raan_deg + 180.0) % 360.0 - 180.0)
+                target_orbit_met = target_orbit_met and raan_error <= 0.5
+            duration = data.trajectory_duration_s
+        elif elements["e"] >= 1.0 or not math.isfinite(elements["period_min"]):
+            raise ValueError(
+                "Requested bound orbit was not achieved: the final trajectory is not elliptic."
+            )
         else:
+            if elements["perigee_km"] < 120.0:
+                raise ValueError(
+                    f"Final orbit intersects the protected low-altitude limit "
+                    f"(perigee {elements['perigee_km']:.1f} km)."
+                )
+            if data.mission_type == "elliptical":
+                perigee_tolerance = max(10.0, data.target_alt * 0.01)
+                apogee_tolerance = max(10.0, data.target_apogee_alt * 0.01)
+                target_orbit_met = (
+                    abs(elements["perigee_km"] - data.target_alt) <= perigee_tolerance
+                    and abs(elements["apogee_km"] - data.target_apogee_alt) <= apogee_tolerance
+                )
+            if data.target_inclination_deg is not None:
+                target_orbit_met = target_orbit_met and (
+                    abs(elements["inc_deg"] - data.target_inclination_deg) <= 0.5
+                )
+            if data.target_raan_deg is not None:
+                raan_error = abs((elements["raan_deg"] - data.target_raan_deg + 180.0) % 360.0 - 180.0)
+                target_orbit_met = target_orbit_met and raan_error <= 0.5
             duration = data.orbit_count * elements["period_min"] * 60.0
         orbit = rp.propagate_orbit(orbit_state, t_insert, theta0, duration=duration, dt=15)
         # Visibility must cover the powered ascent AND the propagated orbital
@@ -497,6 +564,9 @@ def simulate(data: SimulationInput):
             "max_g": float(ascent["acc_g"].max()),
             "azimuth_rotating_deg": azimuth[0], "azimuth_inertial_deg": azimuth[1],
             "earth_rotation_bonus_mps": azimuth[2], "delta_v_mps": delta_v,
+            "target_orbit_met": bool(target_orbit_met),
+            "target_c3_km2_s2": data.target_c3_km2_s2,
+            "actual_c3_km2_s2": elements["c3_km2_s2"],
             "visible_duration_s": visible_duration_s,
             "sunlit_percent": float(visible["rocket_sunlit"].mean() * 100) if not visible.empty else 0.0,
             "photo_window_percent": float(visible["photo_window"].mean() * 100) if not visible.empty else 0.0,
@@ -533,7 +603,12 @@ def simulate(data: SimulationInput):
                 "obs_lon": data.obs_lon, "obs_alt": data.obs_alt,
                 "mission_type": data.mission_type, "target_alt_km": data.target_alt,
                 "target_apogee_alt_km": data.target_apogee_alt,
-                "launch_azimuth_deg": data.launch_azimuth_deg}
+                "launch_azimuth_deg": effective_launch_azimuth,
+                "preferred_launch_azimuth_deg": data.launch_azimuth_deg,
+                "target_inclination_deg": data.target_inclination_deg,
+                "target_raan_deg": data.target_raan_deg,
+                "target_c3_km2_s2": data.target_c3_km2_s2,
+                "trajectory_duration_s": data.trajectory_duration_s}
         })
     except HTTPException:
         raise

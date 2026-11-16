@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+
+import pytest
 import math
 
 import pandas as pd
@@ -152,3 +154,49 @@ def test_visible_duration_sums_only_contiguous_visible_samples():
         "el_deg": [10.0, 10.0, 0.0, 10.0, 10.0],
     })
     assert _sampled_visible_duration(look, 5.0) == 2.0
+
+
+def test_orbital_elements_classifies_hyperbolic_escape_and_reports_c3():
+    radius = rp.RE + 200_000.0
+    elements = rp.orbital_elements([radius, 0.0, 0.0], [0.0, 12_000.0, 0.0])
+    assert elements["conic_type"] == "hyperbolic"
+    assert elements["e"] > 1.0
+    assert elements["c3_km2_s2"] > 0.0
+    assert elements["v_inf_km_s"] > 0.0
+    assert math.isinf(elements["apogee_km"])
+
+
+def test_orbital_elements_classifies_bound_ellipse():
+    radius = rp.RE + 400_000.0
+    elements = rp.orbital_elements([radius, 0.0, 0.0], [0.0, 7_000.0, 0.0])
+    assert elements["conic_type"] == "elliptic"
+    assert elements["c3_km2_s2"] < 0.0
+    assert elements["v_inf_km_s"] == 0.0
+
+
+def test_inclination_target_selects_reachable_heading():
+    azimuth = rp.launch_azimuth_for_inclination(13.72, 75.3, 51.6)
+    r = rp.geodetic_to_ecef(13.72, 101.0, 0.0)
+    normal = rp.launch_plane_normal(r, azimuth)
+    inclination = math.degrees(math.acos(max(-1.0, min(1.0, normal[2]))))
+    assert inclination == pytest.approx(51.6, abs=1e-8)
+
+
+def test_inclination_below_launch_latitude_is_rejected():
+    with pytest.raises(ValueError, match="unreachable"):
+        rp.launch_azimuth_for_inclination(28.5, 90.0, 10.0)
+
+
+def test_requested_raan_plane_derives_launch_heading_at_epoch():
+    lat, lon, jd = 13.72, 101.0, 2461365.5
+    az = rp.launch_azimuth_for_inclination(lat, 75.3, 51.6)
+    position = rp._launch_eci_position(lat, lon, 0.0, jd)
+    # Obtain the RAAN of the plane produced by this heading at the selected epoch.
+    theta = rp.gmst(jd)
+    ecef = rp.geodetic_to_ecef(lat, lon, 0.0)
+    c, s = math.cos(theta), math.sin(theta)
+    r_eci = [c * ecef[0] - s * ecef[1], s * ecef[0] + c * ecef[1], ecef[2]]
+    normal = rp.launch_plane_normal(r_eci, az)
+    raan = math.degrees(math.atan2(normal[0], -normal[1])) % 360.0
+    derived = rp.launch_azimuth_for_plane(lat, lon, 0.0, jd, 51.6, raan)
+    assert derived == pytest.approx(az, abs=1e-7)
