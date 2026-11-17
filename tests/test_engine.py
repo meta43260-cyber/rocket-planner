@@ -8,7 +8,7 @@ import pandas as pd
 import rocket_planner as rp
 import booster as bst
 from main import (clean, health, jd_from_datetime, _visibility_trajectory,
-                  _sampled_visible_duration)
+                  _sampled_visible_duration, _resolve_orbital_targets)
 
 
 def test_j2000_epoch_conversion():
@@ -200,3 +200,22 @@ def test_requested_raan_plane_derives_launch_heading_at_epoch():
     raan = math.degrees(math.atan2(normal[0], -normal[1])) % 360.0
     derived = rp.launch_azimuth_for_plane(lat, lon, 0.0, jd, 51.6, raan)
     assert derived == pytest.approx(az, abs=1e-7)
+
+
+
+def test_auto_orbital_data_mode_does_not_enforce_unknown_targets():
+    assert _resolve_orbital_targets("auto", 51.6, 120.0, 12.0) == (None, None, None)
+
+
+def test_manual_orbital_data_mode_uses_only_entered_targets():
+    assert _resolve_orbital_targets("manual", 51.6, None, None) == (51.6, None, None)
+
+
+def test_manual_raan_requires_inclination():
+    with pytest.raises(ValueError, match="Set target inclination"):
+        _resolve_orbital_targets("manual", None, 120.0, None)
+
+
+def test_invalid_orbital_data_mode_is_rejected():
+    with pytest.raises(ValueError, match="orbital_data_mode"):
+        _resolve_orbital_targets("guess", None, None, None)
