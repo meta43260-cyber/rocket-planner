@@ -317,7 +317,6 @@ def health():
             "features": ["ascent", "orbit", "observer", "boosters", "timeline", "exports"]}
 
 
-@app.post("/api/simulate")
 def _resolve_orbital_targets(mode, inclination, raan, c3):
     """Return only constraints that the selected input mode is allowed to enforce."""
     if mode not in ("auto", "manual"):
