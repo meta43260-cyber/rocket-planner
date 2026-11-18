@@ -209,15 +209,43 @@ def _validate_thrust_curve(points, label):
         raise HTTPException(422, f"{label}: thrust-curve times must be strictly increasing.")
 
 
-def _visibility_trajectory(ascent, orbit):
-    """Join ascent and propagated orbit states on the same launch-relative time axis."""
-    frames = [frame for frame in (ascent, orbit) if frame is not None and not frame.empty]
-    if not frames:
+def _visibility_trajectory(*frames):
+    """Join ascent, coast and orbit states on the same launch-relative time axis."""
+    valid = [frame for frame in frames if frame is not None and not getattr(frame, "empty", True)]
+    if not valid:
         return pd.DataFrame()
-    return (pd.concat(frames, ignore_index=True)
+    return (pd.concat(valid, ignore_index=True)
             .sort_values("t")
             .drop_duplicates(subset=["t"], keep="last")
             .reset_index(drop=True))
+
+
+def _sample_coast_arc(state, t_start, t_end, theta0, sample_dt=5.0):
+    """Propagate a ballistic coast arc for map display (no thrust)."""
+    import numpy as np
+    y = np.array(state, dtype=float)
+    rows = []
+    t = float(t_start)
+    end = float(t_end)
+    dt = max(float(sample_dt), 1.0)
+    if end <= t + 1e-9:
+        lat, lon, alt = rp.eci_to_geodetic(y[0:3], theta0 + rp.OMEGA_E * t)
+        return pd.DataFrame([dict(t=t, lat=lat, lon=lon, alt_km=alt/1000.0,
+                                 v_inertial=float(np.linalg.norm(y[3:6])))])
+    while t <= end + 1e-9:
+        lat, lon, alt = rp.eci_to_geodetic(y[0:3], theta0 + rp.OMEGA_E * t)
+        rows.append(dict(t=t, lat=lat, lon=lon, alt_km=alt/1000.0,
+                         v_inertial=float(np.linalg.norm(y[3:6]))))
+        if t >= end - 1e-9:
+            break
+        step = min(dt, end - t)
+        k1 = rp._two_body_j2(y)
+        k2 = rp._two_body_j2(y + 0.5 * step * k1)
+        k3 = rp._two_body_j2(y + 0.5 * step * k2)
+        k4 = rp._two_body_j2(y + step * k3)
+        y = y + (step / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+        t += step
+    return pd.DataFrame(rows)
 
 
 def _sampled_visible_duration(look, min_elevation):
@@ -486,6 +514,7 @@ def simulate(data: SimulationInput):
                 max_coast=circular_coast_limit_s,
                 verbose=False
             )
+            coast = _sample_coast_arc(state, t_end, t_insert, theta0, sample_dt=5.0)
         except ValueError as exc:
             if "apoapsis ต่ำกว่า" not in str(exc):
                 raise
@@ -600,7 +629,7 @@ def simulate(data: SimulationInput):
         orbit = rp.propagate_orbit(orbit_state, t_insert, theta0, duration=duration, dt=15)
         # Visibility must cover the powered ascent AND the propagated orbital
         # ground track. The map displays both; previously only ascent was tested.
-        visibility_trajectory = _visibility_trajectory(ascent, orbit)
+        visibility_trajectory = _visibility_trajectory(ascent, coast, orbit)
         look = rp.look_angles(visibility_trajectory, data.obs_lat, data.obs_lon,
                               data.obs_alt, launch_jd, theta0)
         visible = look[look["el_deg"] > data.min_elevation]
@@ -647,6 +676,7 @@ def simulate(data: SimulationInput):
                            "last": last, "count": len(visible)},
             "ascent": records(ascent, ["t","lat","lon","alt_km","v_inertial",
                 "v_relative","mach","q_kPa","fpa_deg","mass","thrust_kN","acc_g","stage"]),
+            "coast": records(coast, ["t","lat","lon","alt_km","v_inertial"]),
             "orbit": records(orbit, ["t","lat","lon","alt_km"]),
             "look": records(look, ["t","az_deg","el_deg","range_km","alt_km",
                 "sun_el_deg","rocket_sunlit","photo_window","angular_rate"]),

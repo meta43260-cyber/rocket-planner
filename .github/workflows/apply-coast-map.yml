@@ -1,0 +1,21 @@
+name: Apply coast map patch
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/map-coast-v2, main]
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply coast map support
+        run: python3 scripts/apply_coast_map.py
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.py static/index.html
+          git diff --staged --quiet || git commit -m "Apply coast trajectory map support"
+          git push
