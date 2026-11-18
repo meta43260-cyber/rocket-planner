@@ -441,21 +441,43 @@ if run:
             if "asc" in locals() and isinstance(asc, pd.DataFrame) and not asc.empty:
                 diag_cols = [
                     "t", "stage", "alt_km", "guidance_mode",
+                    "fpa_deg", "inertial_fpa_deg",
+                    "radial_velocity_mps", "inertial_radial_velocity_mps",
                     "inertial_tangential_velocity_mps", "circular_speed_mps",
-                    "tangential_speed_ratio", "specific_energy_mj_kg",
-                    "predicted_periapsis_alt_km", "predicted_apoapsis_alt_km",
+                    "tangential_speed_ratio", "commanded_pitch_deg",
+                    "thrust_radial_fraction", "thrust_tangential_fraction",
+                    "thrust_radial_accel_mps2", "thrust_tangential_accel_mps2",
+                    "specific_energy_mj_kg", "predicted_periapsis_alt_km",
+                    "predicted_apoapsis_alt_km", "capture_guidance_active",
+                    "capture_guidance_start_t_s", "capture_threshold_alt_km",
                     "apoapsis_circularization_dv_mps", "remaining_stage_dv_mps",
-                    "stage_propellant_remaining_kg", "thrust_kN",
+                    "stage_burn_elapsed_s", "stage_propellant_remaining_kg",
+                    "mass", "thrust_kN",
                 ]
                 diag_cols = [c for c in diag_cols if c in asc.columns]
+                # dt_out is 0.5 s, so every 20th row is a 10-second sample.
                 samples = asc.iloc[::20][diag_cols].copy()
-                key_rows = asc.loc[[asc["alt_km"].idxmax(), asc.index[-1]], diag_cols]
+                # Preserve important transitions even when they fall between
+                # regular samples: stage/mode changes, max altitude, max predicted
+                # apoapsis, and the final powered-flight sample.
+                key_indices = {
+                    int(asc["alt_km"].idxmax()),
+                    int(asc["predicted_apoapsis_alt_km"].idxmax()),
+                    int(asc.index[-1]),
+                }
+                for column in ("stage", "guidance_mode"):
+                    if column in asc.columns:
+                        changed = asc[column].ne(asc[column].shift())
+                        key_indices.update(int(i) for i in asc.index[changed])
+                key_rows = asc.loc[sorted(key_indices), diag_cols]
                 diagnostics = pd.concat([samples, key_rows]).drop_duplicates(subset=["t"])
-                st.markdown("### Energy / Remaining-Δv diagnostics")
+                diagnostics = diagnostics.sort_values("t")
+                st.markdown("### Ascent guidance / orbital-energy diagnostics")
                 st.caption(
-                    "แสดงตัวอย่างทุก 10 วินาที พร้อมจุดความสูงสูงสุดและจุดสุดท้าย "
+                    "แสดงตัวอย่างทุก 10 วินาที พร้อมจุดเปลี่ยนสเตจ/โหมดนำวิถี "
+                    "จุดความสูงสูงสุด จุด apoapsis ที่คาดการณ์สูงสุด และจุดสุดท้าย "
                     "ค่า Remaining Δv เป็นค่าทฤษฎีของเชื้อเพลิงสเตจปัจจุบัน "
-                    "สมมติใช้ได้ทั้งหมดที่ ISP ณ เวลานั้น ไม่รวม gravity/drag/steering losses"
+                    "ไม่รวม gravity/drag/steering losses"
                 )
                 st.dataframe(
                     diagnostics.round(3), use_container_width=True, hide_index=True
