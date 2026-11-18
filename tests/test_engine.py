@@ -139,12 +139,16 @@ def test_visibility_trajectory_includes_orbit_after_ascent():
         {"t": 0.0, "x": 1.0, "y": 0.0, "z": 0.0, "alt_km": 0.0},
         {"t": 1.0, "x": 2.0, "y": 0.0, "z": 0.0, "alt_km": 10.0},
     ])
+    coast = pd.DataFrame([
+        {"t": 5.0, "x": 2.5, "y": 0.0, "z": 0.0, "alt_km": 120.0},
+        {"t": 10.0, "x": 2.8, "y": 0.0, "z": 0.0, "alt_km": 200.0},
+    ])
     orbit = pd.DataFrame([
         {"t": 20.0, "x": 3.0, "y": 0.0, "z": 0.0, "alt_km": 450.0},
         {"t": 35.0, "x": 4.0, "y": 0.0, "z": 0.0, "alt_km": 450.0},
     ])
-    combined = _visibility_trajectory(ascent, orbit)
-    assert combined["t"].tolist() == [0.0, 1.0, 20.0, 35.0]
+    combined = _visibility_trajectory(ascent, coast, orbit)
+    assert combined["t"].tolist() == [0.0, 1.0, 5.0, 10.0, 20.0, 35.0]
     assert combined.iloc[-1]["alt_km"] == 450.0
 
 
@@ -189,7 +193,8 @@ def test_inclination_below_launch_latitude_is_rejected():
 
 def test_requested_raan_plane_derives_launch_heading_at_epoch():
     lat, lon, jd = 13.72, 101.0, 2461365.5
-    az = rp.launch_azimuth_for_inclination(lat, 75.3, 51.6)
+    az = rp.launch_azimuth_for_inclination(lat, 75.3, 51.6
+)
     position = rp._launch_eci_position(lat, lon, 0.0, jd)
     # Obtain the RAAN of the plane produced by this heading at the selected epoch.
     theta = rp.gmst(jd)
