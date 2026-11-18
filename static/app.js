@@ -75,7 +75,7 @@ function splitTrack(points){
  if(seg.length>1)out.push(seg);
  return out;
 }
-function renderGroundTrackFallback(el,asc,orb,p){
+function renderGroundTrackFallback(el,asc,coast,orb,p){
  const W=960,H=480,project=pt=>[(Number(pt[1])+180)/360*W,(90-Math.max(-90,Math.min(90,Number(pt[0]))))/180*H];
  const path=points=>splitTrack(points).map(seg=>seg.map((pt,i)=>{const q=project(pt);return (i?"L":"M")+q[0].toFixed(1)+","+q[1].toFixed(1)}).join(" ")).join(" ");
  let grid="";
@@ -84,44 +84,30 @@ function renderGroundTrackFallback(el,asc,orb,p){
  const launch=project([p.site_lat,p.site_lon]),observer=project([p.obs_lat,p.obs_lon]);
  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Ground track on latitude longitude grid" style="width:100%;height:100%;min-height:260px;display:block;background:#091523">'+grid+
  '<path d="'+path(asc)+'" fill="none" stroke="#ff8b59" stroke-width="3" stroke-linejoin="round"/>'+
+ '<path d="'+path(coast)+'" fill="none" stroke="#f5c76b" stroke-width="2.5" stroke-dasharray="4 4" stroke-linejoin="round"/>'+
  '<path d="'+path(orb)+'" fill="none" stroke="#53d5d0" stroke-width="2.5" stroke-dasharray="7 5" stroke-linejoin="round"/>'+
  '<circle cx="'+launch[0]+'" cy="'+launch[1]+'" r="6" fill="#f5c76b"/><circle cx="'+observer[0]+'" cy="'+observer[1]+'" r="6" fill="#ffffff"/>'+
- '<text x="18" y="'+(H-18)+'" fill="#9fb2c5" font-size="13">แผนที่สำรองแบบพิกัดละติจูด/ลองจิจูด · เมื่อแผนที่ออนไลน์ไม่พร้อมใช้งาน</text></svg>';
+ '<text x="18" y="'+(H-18)+'" fill="#9fb2c5" font-size="13">Ascent · Coast · Orbit</text></svg>';
 }
 function drawMap(data,p){
  const el=$("map");if(!el)return;
- const ascent=Array.isArray(data.ascent)?data.ascent:[],orbit=Array.isArray(data.orbit)?data.orbit:[];
- const asc=ascent.filter(x=>Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lon))).map(x=>[Number(x.lat),Number(x.lon)]);
- const orb=orbit.filter(x=>Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lon))).map(x=>[Number(x.lat),Number(x.lon)]);
- if(!asc.length&&!orb.length){el.innerHTML='<p class="hint">ไม่มีพิกัดเส้นทางสำหรับแสดงแผนที่</p>';return}
+ const ascent=Array.isArray(data.ascent)?data.ascent:[],coastRows=Array.isArray(data.coast)?data.coast:[],orbit=Array.isArray(data.orbit)?data.orbit:[];
+ const toPoints=rows=>rows.filter(x=>Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lon))).map(x=>[Number(x.lat),Number(x.lon)]);
+ const asc=toPoints(ascent),coast=toPoints(coastRows),orb=toPoints(orbit);
+ if(!asc.length&&!coast.length&&!orb.length){el.innerHTML='<p class="hint">ไม่มีพิกัดเส้นทางสำหรับแสดงแผนที่</p>';return}
  try{
   if(mapObj){mapObj.remove();mapObj=null}
-  if(!window.L||typeof L.map!=="function"){renderGroundTrackFallback(el,asc,orb,p);return}
-  mapObj=L.map(el,{worldCopyJump:true}).setView([0,0],2);
+  if(!window.L||typeof L.map!=="function"){renderGroundTrackFallback(el,asc,coast,orb,p);return}
+  mapObj=L.map(el,{worldCopyJump:true}).setView([0,0],2);const currentMap=mapObj;
   const tiles=L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap",maxZoom:18});
-  let tileErrors=0;
-  tiles.on("tileerror",()=>{tileErrors++;if(tileErrors>=3&&mapObj){try{mapObj.remove()}catch(_){}mapObj=null;renderGroundTrackFallback(el,asc,orb,p)}});
-  tiles.addTo(mapObj);
-  splitTrack(asc).forEach(seg=>L.polyline(seg,{color:"#ff8b59",weight:3}).addTo(mapObj));
-  splitTrack(orb).forEach(seg=>L.polyline(seg,{color:"#53d5d0",weight:2,dashArray:"6 5"}).addTo(mapObj));
-  if(Number.isFinite(Number(p.site_lat))&&Number.isFinite(Number(p.site_lon)))L.marker([p.site_lat,p.site_lon]).addTo(mapObj).bindPopup("Launch site");
-  if(Number.isFinite(Number(p.obs_lat))&&Number.isFinite(Number(p.obs_lon)))L.marker([p.obs_lat,p.obs_lon]).addTo(mapObj).bindPopup("Observer");
-  // Frame the powered ascent, not the multi-orbit track. Including several
-  // orbital revolutions in fitBounds can create a world-spanning box and make
-  // the launch trajectory look distorted or disappear at a tiny zoom level.
-  requestAnimationFrame(()=>{
-   if(!mapObj)return;
-   mapObj.invalidateSize();
-   if(asc.length>1){
-    const bounds=L.latLngBounds(asc);
-    if(bounds.isValid())mapObj.fitBounds(bounds.pad(0.12),{padding:[24,24],maxZoom:4});
-   }else if(Number.isFinite(Number(p.site_lat))&&Number.isFinite(Number(p.site_lon))){
-    mapObj.setView([Number(p.site_lat),Number(p.site_lon)],3);
-   }else if(orb.length){
-    mapObj.setView(orb[0],2);
-   }
-  });
- }catch(err){console.error("Ground track render failed",err);if(mapObj){try{mapObj.remove()}catch(_){}mapObj=null}renderGroundTrackFallback(el,asc,orb,p)}
+  let tileErrors=0;tiles.on("tileerror",()=>{tileErrors++;if(tileErrors>=3&&mapObj===currentMap){try{currentMap.remove()}catch(_){}mapObj=null;renderGroundTrackFallback(el,asc,coast,orb,p)}});tiles.addTo(currentMap);
+  splitTrack(asc).forEach(seg=>L.polyline(seg,{color:"#ff8b59",weight:3,opacity:.95}).addTo(currentMap).bindPopup("Ascent"));
+  splitTrack(coast).forEach(seg=>L.polyline(seg,{color:"#f5c76b",weight:2.5,dashArray:"4 4",opacity:.95}).addTo(currentMap).bindPopup("Coast"));
+  splitTrack(orb).forEach(seg=>L.polyline(seg,{color:"#53d5d0",weight:2,dashArray:"6 5",opacity:.9}).addTo(currentMap).bindPopup("Orbit"));
+  if(Number.isFinite(Number(p.site_lat))&&Number.isFinite(Number(p.site_lon)))L.marker([p.site_lat,p.site_lon]).addTo(currentMap).bindPopup("Launch site");
+  if(Number.isFinite(Number(p.obs_lat))&&Number.isFinite(Number(p.obs_lon)))L.marker([p.obs_lat,p.obs_lon]).addTo(currentMap).bindPopup("Observer");
+  requestAnimationFrame(()=>{if(mapObj!==currentMap)return;currentMap.invalidateSize();const frame=asc.concat(coast,orb.length?[orb[0]]:[]);if(frame.length>1){const bounds=L.latLngBounds(frame);if(bounds.isValid())currentMap.fitBounds(bounds.pad(.12),{padding:[24,24],maxZoom:5})}else if(Number.isFinite(Number(p.site_lat))&&Number.isFinite(Number(p.site_lon)))currentMap.setView([Number(p.site_lat),Number(p.site_lon)],3);else if(orb.length)currentMap.setView(orb[0],2)});
+ }catch(err){console.error("Ground track render failed",err);if(mapObj){try{mapObj.remove()}catch(_){}mapObj=null}renderGroundTrackFallback(el,asc,coast,orb,p)}
 }
 function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function formatApiError(detail){
@@ -226,7 +212,7 @@ function render(data,p){
  const entries=[["Orbital data mode",s.orbital_data_mode==="manual"?"Manual":"Auto"],["Target inclination",targets.inclination_deg?.requested??"Not specified","°"],["Actual inclination",targets.inclination_deg?.actual,"°"],["Target RAAN",targets.raan_deg?.requested??"Not specified","°"],["Actual RAAN",targets.raan_deg?.actual,"°"],["Target C3",targets.c3_km2_s2?.requested??"Not specified","km²/s²"],["Actual C3",targets.c3_km2_s2?.actual,"km²/s²"],["Conic type",e.conic_type,""],["Semi-major axis",e.a_km,"km"],["Eccentricity",e.e,""],["Specific orbital energy",e.specific_energy_mj_kg,"MJ/kg"],["C3",e.c3_km2_s2,"km²/s²"],["Hyperbolic excess speed",e.v_inf_km_s,"km/s"],["Inclination",e.inc_deg,"°"],["RAAN",e.raan_deg,"°"],["Argument of periapsis",e.argp_deg,"°"],["True anomaly",e.ta_deg,"°"],["Perigee",e.perigee_km,"km"],["Apogee",e.apogee_km,"km"],["Orbital period",e.period_min,"min"],["Earth rotation bonus",s.earth_rotation_bonus_mps,"m/s"]];
  $("elements").innerHTML=entries.map(([k,x,u])=>`<div class="element"><span>${k}</span><b>${x===null||x===undefined?"—":(typeof x==="number"?safe(x,2)+u:escapeHtml(x))}</b></div>`).join("");
 }
-function buildKml(data){const placemark=(name,pts,color)=>{const lines=splitTrack(pts.map(x=>[x.lat,x.lon,x.alt_km*1000]));return lines.map(seg=>`<Placemark><name>${name}</name><Style><LineStyle><color>${color}</color><width>3</width></LineStyle></Style><LineString><altitudeMode>absolute</altitudeMode><coordinates>${seg.map(x=>x[1].toFixed(6)+","+x[0].toFixed(6)+","+x[2].toFixed(1)).join(" ")}</coordinates></LineString></Placemark>`).join("")};return '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Rocket Planner trajectory</name>'+placemark("Ascent",data.ascent,"ff598bff")+placemark("Orbit",data.orbit,"ffd0d653")+"</Document></kml>"}
+function buildKml(data){const placemark=(name,pts,color)=>{const lines=splitTrack((pts||[]).map(x=>[x.lat,x.lon,x.alt_km*1000]));return lines.map(seg=>'<Placemark><name>'+name+'</name><Style><LineStyle><color>'+color+'</color><width>3</width></LineStyle></Style><LineString><altitudeMode>absolute</altitudeMode><coordinates>'+seg.map(x=>x[1].toFixed(6)+","+x[0].toFixed(6)+","+x[2].toFixed(1)).join(" ")+'</coordinates></LineString></Placemark>').join("")};return '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Rocket Planner trajectory</name>'+placemark("Ascent",data.ascent,"ff598bff")+placemark("Coast",data.coast,"ff6bc7f5")+placemark("Orbit",data.orbit,"ffd0d653")+"</Document></kml>"}
 $("export-ascent").addEventListener("click",()=>lastResult&&download("ascent.csv",csv(lastResult.ascent),"text/csv"));
 $("export-look").addEventListener("click",()=>lastResult&&download("look_angles.csv",csv(lastResult.look),"text/csv"));
 $("export-orbit").addEventListener("click",()=>lastResult&&download("orbit.csv",csv(lastResult.orbit),"text/csv"));
