@@ -67,7 +67,7 @@
 <div id="output" class="hidden">
 <div class="result-heading"><div><span class="eyebrow">MISSION ANALYSIS</span><h2>ผลการจำลอง</h2></div><span class="live-tag">● COMPLETE</span></div>
 <div id="warnings"></div><div class="metrics" id="metrics"></div>
-<div class="panel"><div class="panel-head"><div><span class="eyebrow">GROUND TRACK</span><h3>เส้นทางภาคพื้นดิน / Ground Track</h3></div><span class="step">WGS84</span></div><div id="map"></div><div class="legend"><span><i class="ascent-dot"></i> Ascent</span><span><i class="orbit-dot"></i> Orbit</span><span>▲ Launch site</span><span>★ Observer</span></div></div>
+<div class="panel"><div class="panel-head"><div><span class="eyebrow">GROUND TRACK</span><h3>เส้นทางภาคพื้นดิน / Ground Track</h3></div><span class="step">WGS84</span></div><div id="map"></div><div class="legend"><span><i class="ascent-dot"></i> Ascent</span><span><i class="coast-dot"></i> Coast</span><span><i class="orbit-dot"></i> Orbit</span><span>▲ Launch site</span><span>★ Observer</span></div></div>
 <div class="panel event-panel"><div class="panel-head"><div><span class="eyebrow">FLIGHT EVENTS</span><h3>ลำดับเหตุการณ์</h3></div></div><div class="table-wrap"><table id="events-table"><thead><tr><th>Event</th><th>T+ (s)</th><th>Altitude (km)</th><th>Velocity (m/s)</th></tr></thead><tbody></tbody></table></div></div>
 <div id="boost-panel" class="panel hidden"><span class="eyebrow">BOOSTER PHASES</span><h3>Side Booster phase breakdown</h3><div class="table-wrap"><table id="boost-table"><thead><tr><th>Time</th><th>Phase</th><th>Thrust SL</th><th>Isp Vac</th><th>Propellant</th><th>Jettison</th></tr></thead><tbody></tbody></table></div></div>
 <div class="panel telemetry-panel"><div class="panel-head"><div><span class="eyebrow">ASCENT TELEMETRY</span><h3>ข้อมูลการไต่ระดับ · ตารางทุกประมาณ 10 วินาที</h3></div></div><p class="hint">แสดงตัวอย่างข้อมูลตามเวลาเพื่อให้อ่านง่าย ข้อมูลดิบเต็มความละเอียดส่งออกได้ทาง ascent.csv</p><div class="table-wrap"><table id="ascent-table"><thead><tr><th>T+ (s)</th><th>Altitude (km)</th><th>Velocity (m/s)</th><th>Mach</th><th>Dynamic pressure (kPa)</th><th>Flight path (°)</th><th>Acceleration (g)</th><th>Mass (kg)</th><th>Thrust (kN)</th><th>Stage</th></tr></thead><tbody></tbody></table></div></div>
@@ -78,4 +78,5 @@
 <footer>ROCKET PLANNER <span>Numerical mission simulation · Verify with authoritative flight data before operational use</span></footer>
 </main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="/static/app.js?v=20261116-general-conics1"></script>
+<script src="/static/coast_map_overlay.js"></script>
 </body></html>
