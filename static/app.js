@@ -26,7 +26,7 @@ $("use_boost").addEventListener("change",()=> $("boost-fields").classList.toggle
 $("use_timeline").addEventListener("change",()=>{$("timeline-fields").classList.toggle("hidden",!$("use_timeline").checked);if($("use_timeline").checked){try{$("timeline_stages").value=JSON.stringify(stageTimeline(JSON.parse($("stages").value)),null,2)}catch(e){}}});
 $("auto_profile").addEventListener("change",()=> $("manual-profile").classList.toggle("hidden",$("auto_profile").checked));
 function download(name,content,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)}
-function n(id){return Number($(id).value)}
+function n(id){const value=$(id).value.trim();return value===""?undefined:Number(value)}
 function safe(v,d=2){return v===null||v===undefined||!Number.isFinite(Number(v))?"—":Number(v).toFixed(d)}
 function metric(label,value,sub=""){return `<div class="metric"><span>${label}</span><strong>${value}</strong><small>${sub}</small></div>`}
 function csv(rows){if(!rows||!rows.length)return "";const keys=Object.keys(rows[0]);const q=x=>{if(x===null||x===undefined)return "";const s=String(x);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};return [keys.map(q).join(","),...rows.map(r=>keys.map(k=>q(r[k])).join(","))].join("\n")}
