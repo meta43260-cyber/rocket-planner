@@ -147,7 +147,7 @@ class Mission:
     mission_type: str = "circular"
     target_apogee_alt: float = 500e3
     auto_profile: bool = False
-    target_c3_km2_s2: float = 0.0
+    target_c3_km2_s2: float | None = None
 
 # ============================================================
 # เวลา / พิกัด
@@ -733,7 +733,7 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
             r_now, v_now = state[0:3], state[3:6]
             energy = 0.5 * float(np.dot(v_now, v_now)) - MU / np.linalg.norm(r_now)
             if mission.mission_type == "escape":
-                target_energy = max(float(mission.target_c3_km2_s2), 0.0) * 500_000.0
+                target_energy = max(float(mission.target_c3_km2_s2 or 0.0), 0.0) * 500_000.0
                 if (energy >= target_energy
                         and not _has_pending_timeline_events(stages, idx, t)):
                     break

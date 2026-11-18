@@ -96,10 +96,11 @@ class SimulationInput(BaseModel):
                               description="Target orbit altitude or elliptical perigee, km")
     target_apogee_alt: float = Field(default=35786, ge=120, le=1000000)
     launch_azimuth_deg: float = Field(default=75.3, ge=0, le=360, description="Preferred Earth-fixed launch azimuth clockwise from true north")
+    orbital_data_mode: str = Field(default="auto", description="auto ignores unknown manual orbital constraints; manual enforces entered targets")
     target_inclination_deg: float | None = Field(default=None, ge=0, le=180)
     target_raan_deg: float | None = Field(default=None, ge=0, lt=360)
-    target_c3_km2_s2: float = Field(default=0.0, ge=0, le=1000,
-                                    description="Required Earth-relative characteristic energy for escape")
+    target_c3_km2_s2: float | None = Field(default=None, ge=0, le=1000,
+                                            description="Optional required Earth-relative characteristic energy for escape")
     trajectory_duration_s: float = Field(default=86400, ge=3600, le=2592000)
     mission_type: str = "circular"
     launch_utc: datetime
@@ -316,14 +317,30 @@ def health():
             "features": ["ascent", "orbit", "observer", "boosters", "timeline", "exports"]}
 
 
+def _resolve_orbital_targets(mode, inclination, raan, c3):
+    """Return only constraints that the selected input mode is allowed to enforce."""
+    if mode not in ("auto", "manual"):
+        raise ValueError("orbital_data_mode must be auto or manual")
+    if mode == "auto":
+        return None, None, None
+    if raan is not None and inclination is None:
+        raise ValueError("Set target inclination when specifying a target RAAN.")
+    return inclination, raan, c3
+
+
 @app.post("/api/simulate")
 def simulate(data: SimulationInput):
     if data.mission_type not in ("circular", "elliptical", "escape"):
         raise HTTPException(422, "mission_type must be circular, elliptical or escape")
     if data.mission_type == "elliptical" and data.target_apogee_alt <= data.target_alt:
         raise HTTPException(422, "Elliptical orbit requires apogee altitude greater than perigee altitude.")
-    if data.target_raan_deg is not None and data.target_inclination_deg is None:
-        raise HTTPException(422, "Set target inclination when specifying a target RAAN.")
+    try:
+        target_inclination, target_raan, target_c3 = _resolve_orbital_targets(
+            data.orbital_data_mode, data.target_inclination_deg,
+            data.target_raan_deg, data.target_c3_km2_s2
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     if data.use_boost and not data.boost_groups:
         raise HTTPException(422, "Add at least one booster group or disable Side Booster.")
     # Liftoff TWR needs a sea-level thrust datum. ISP SL may be omitted,
@@ -367,15 +384,15 @@ def simulate(data: SimulationInput):
     try:
         launch_jd = jd_from_datetime(data.launch_utc)
         effective_launch_azimuth = data.launch_azimuth_deg
-        if data.target_raan_deg is not None:
+        if target_raan is not None:
             effective_launch_azimuth = rp.launch_azimuth_for_plane(
                 data.site_lat, data.site_lon, data.site_alt, launch_jd,
-                data.target_inclination_deg, data.target_raan_deg
+                target_inclination, target_raan
             )
-        elif data.target_inclination_deg is not None:
+        elif target_inclination is not None:
             effective_launch_azimuth = rp.launch_azimuth_for_inclination(
                 data.site_lat, data.launch_azimuth_deg,
-                data.target_inclination_deg
+                target_inclination
             )
         original = [s.model_dump() if hasattr(s, "model_dump") else s.dict() for s in data.stages]
         stages_cfg = [dict(s) for s in original]
@@ -449,7 +466,7 @@ def simulate(data: SimulationInput):
             mission_type=data.mission_type,
             target_apogee_alt=(data.target_apogee_alt if data.mission_type != "circular"
                                else data.target_alt) * 1000,
-            target_c3_km2_s2=data.target_c3_km2_s2,
+            target_c3_km2_s2=target_c3,
             auto_profile=data.auto_profile
         )
         ascent, state, t_end, theta0, azimuth = rp.simulate_ascent(
@@ -503,19 +520,19 @@ def simulate(data: SimulationInput):
         target_orbit_met = True
         if data.mission_type == "escape":
             actual_c3 = float(elements["c3_km2_s2"])
-            if actual_c3 + 1e-6 < data.target_c3_km2_s2:
+            if target_c3 is not None and actual_c3 + 1e-6 < target_c3:
                 raise ValueError(
                     "Escape target not reached: "
                     f"actual C3={actual_c3:.4f} km²/s², "
-                    f"required C3={data.target_c3_km2_s2:.4f} km²/s²."
+                    f"required C3={target_c3:.4f} km²/s²."
                 )
-            target_orbit_met = actual_c3 + 1e-6 >= data.target_c3_km2_s2
-            if data.target_inclination_deg is not None:
+            target_orbit_met = target_c3 is None or actual_c3 + 1e-6 >= target_c3
+            if target_inclination is not None:
                 target_orbit_met = target_orbit_met and (
-                    abs(elements["inc_deg"] - data.target_inclination_deg) <= 0.5
+                    abs(elements["inc_deg"] - target_inclination) <= 0.5
                 )
-            if data.target_raan_deg is not None:
-                raan_error = abs((elements["raan_deg"] - data.target_raan_deg + 180.0) % 360.0 - 180.0)
+            if target_raan is not None:
+                raan_error = abs((elements["raan_deg"] - target_raan + 180.0) % 360.0 - 180.0)
                 target_orbit_met = target_orbit_met and raan_error <= 0.5
             duration = data.trajectory_duration_s
         elif elements["e"] >= 1.0 or not math.isfinite(elements["period_min"]):
@@ -535,12 +552,12 @@ def simulate(data: SimulationInput):
                     abs(elements["perigee_km"] - data.target_alt) <= perigee_tolerance
                     and abs(elements["apogee_km"] - data.target_apogee_alt) <= apogee_tolerance
                 )
-            if data.target_inclination_deg is not None:
+            if target_inclination is not None:
                 target_orbit_met = target_orbit_met and (
-                    abs(elements["inc_deg"] - data.target_inclination_deg) <= 0.5
+                    abs(elements["inc_deg"] - target_inclination) <= 0.5
                 )
-            if data.target_raan_deg is not None:
-                raan_error = abs((elements["raan_deg"] - data.target_raan_deg + 180.0) % 360.0 - 180.0)
+            if target_raan is not None:
+                raan_error = abs((elements["raan_deg"] - target_raan + 180.0) % 360.0 - 180.0)
                 target_orbit_met = target_orbit_met and raan_error <= 0.5
             duration = data.orbit_count * elements["period_min"] * 60.0
         orbit = rp.propagate_orbit(orbit_state, t_insert, theta0, duration=duration, dt=15)
@@ -565,7 +582,13 @@ def simulate(data: SimulationInput):
             "azimuth_rotating_deg": azimuth[0], "azimuth_inertial_deg": azimuth[1],
             "earth_rotation_bonus_mps": azimuth[2], "delta_v_mps": delta_v,
             "target_orbit_met": bool(target_orbit_met),
-            "target_c3_km2_s2": data.target_c3_km2_s2,
+            "orbital_data_mode": data.orbital_data_mode,
+            "orbital_targets": {
+                "inclination_deg": {"requested": target_inclination, "actual": elements["inc_deg"], "status": "constrained" if target_inclination is not None else "unconstrained"},
+                "raan_deg": {"requested": target_raan, "actual": elements["raan_deg"], "status": "constrained" if target_raan is not None else "unconstrained"},
+                "c3_km2_s2": {"requested": target_c3, "actual": elements["c3_km2_s2"], "status": "constrained" if target_c3 is not None else "unconstrained"},
+            },
+            "target_c3_km2_s2": target_c3,
             "actual_c3_km2_s2": elements["c3_km2_s2"],
             "visible_duration_s": visible_duration_s,
             "sunlit_percent": float(visible["rocket_sunlit"].mean() * 100) if not visible.empty else 0.0,
