@@ -515,7 +515,44 @@ def simulate(data: SimulationInput):
                 f"peak sample: {ascent_sample_diagnostics(peak)}; "
                 f"last sample: {ascent_sample_diagnostics(last)}"
             )
-            raise ValueError(f"{exc}{detail}") from exc
+
+            # Preserve the actual failed ascent trajectory in the API response.
+            # dt_out is 0.5 s, so every 20th row is approximately 10 seconds.
+            diag_cols = [
+                "t", "stage", "alt_km", "guidance_mode",
+                "fpa_deg", "inertial_fpa_deg",
+                "radial_velocity_mps", "inertial_radial_velocity_mps",
+                "inertial_tangential_velocity_mps", "circular_speed_mps",
+                "tangential_speed_ratio", "commanded_pitch_deg",
+                "thrust_radial_fraction", "thrust_tangential_fraction",
+                "thrust_radial_accel_mps2", "thrust_tangential_accel_mps2",
+                "specific_energy_mj_kg", "predicted_periapsis_alt_km",
+                "predicted_apoapsis_alt_km", "capture_guidance_active",
+                "capture_guidance_start_t_s", "capture_threshold_alt_km",
+                "apoapsis_circularization_dv_mps", "remaining_stage_dv_mps",
+                "stage_burn_elapsed_s", "stage_propellant_remaining_kg",
+                "mass", "thrust_kN",
+            ]
+            diag_cols = [column for column in diag_cols if column in ascent.columns]
+            sampled = ascent.iloc[::20][diag_cols].copy()
+            key_indices = {int(ascent.index[-1]), int(ascent["alt_km"].idxmax())}
+            if "predicted_apoapsis_alt_km" in ascent.columns:
+                key_indices.add(int(ascent["predicted_apoapsis_alt_km"].idxmax()))
+            for column in ("stage", "guidance_mode"):
+                if column in ascent.columns:
+                    changed = ascent[column].ne(ascent[column].shift())
+                    key_indices.update(int(index) for index in ascent.index[changed])
+            key_rows = ascent.loc[sorted(key_indices), diag_cols]
+            diagnostics = pd.concat([sampled, key_rows]).drop_duplicates(subset=["t"])
+            diagnostics = diagnostics.sort_values("t")
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": f"{exc}{detail}",
+                    "ascent_diagnostics": records(diagnostics),
+                    "diagnostic_columns": diag_cols,
+                },
+            ) from exc
         elements = rp.orbital_elements(orbit_state[0:3], orbit_state[3:6])
         target_orbit_met = True
         if data.mission_type == "escape":
