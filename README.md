@@ -68,3 +68,15 @@ The API request uses kN for thrust, kg for masses, km for target/fairing altitud
 ## Important scientific limitations
 
 This is a numerical planning/educational model, not a launch-provider trajectory feed or operational flight dynamics system. Vehicle preset data are illustrative and simplified; they are not certified current performance specifications. Actual plume visibility and rocket-body visibility depend on confirmed vehicle configuration, guidance, launch epoch, event timing, attitude, trajectory, atmospheric conditions, terrain/horizon obstruction and solar geometry. The illumination/photo-window calculation inherits the assumptions and approximations of the underlying engine. Validate results against authoritative mission data before using them to plan an observation.
+
+## Development notes
+
+- Python 3.10+ is required.
+- Unit tests: `pip install -r requirements-dev.txt && pytest -q`
+- Browser JS is checked with `node --check static/app.js`
+- The engine lives in `rocket_planner.py` / `booster.py`; the FastAPI surface is `main.py`.
+- Admin and public rocket catalog use Supabase with RLS; never expose a service-role key to the client.
+
+## Known scientific limitations (educational model)
+
+This remains a numerical planning / educational model. Vehicle presets are illustrative. Always validate against authoritative mission data before relying on visibility or performance predictions for real observation planning.
