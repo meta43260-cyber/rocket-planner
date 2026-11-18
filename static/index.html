@@ -23,7 +23,7 @@
 <label>ความสูงฐานปล่อย (m)<input id="site_alt" type="number" step="1"></label>
 <div class="section-label">03 · ORBIT & LAUNCH EPOCH</div>
 <label>เวลาปล่อย UTC<input id="launch_utc" type="datetime-local" value="2026-11-12T12:00" required></label>
-<div class="two"><label>ประเภทวงโคจร<select id="mission_type"><option>Circular · LEO / MEO / GEO</option><option>Elliptical · HEO / GTO</option><option>Escape · Parabolic / Hyperbolic</option></select></label><label>มุมยิงจากฐาน · Launch azimuth (°)<input id="launch_azimuth_deg" type="number" min="0" max="360" step=".1" placeholder="เว้นว่าง = ใช้ค่าระบบ"></label></div><p class="hint">วัดตามเข็มทิศจากทิศเหนือจริง: 0° เหนือ · 90° ตะวันออก · 180° ใต้ · 270° ตะวันตก · 360° เท่ากับ 0°</p>
+<div class="two"><label>ประเภทวงโคจร<select id="mission_type"><option value="circular">Circular · LEO / MEO / GEO</option><option value="elliptical">Elliptical · HEO / GTO</option><option value="escape">Escape · Parabolic / Hyperbolic</option></select></label><label>มุมยิงจากฐาน · Launch azimuth (°)<input id="launch_azimuth_deg" type="number" min="0" max="360" step=".1" placeholder="เว้นว่าง = ใช้ค่าระบบ"></label></div><p class="hint">วัดตามเข็มทิศจากทิศเหนือจริง: 0° เหนือ · 90° ตะวันออก · 180° ใต้ · 270° ตะวันตก · 360° เท่ากับ 0°</p>
 <div class="two"><label>Target altitude / Perigee (km)<input id="target_alt" type="number" min="120" max="100000"></label><label>Apogee target (km)<input id="target_apogee_alt" type="number" min="120" max="1000000"></label></div>
 <label>Orbital target data mode<select id="orbital_data_mode"><option value="auto">Auto · ไม่บังคับค่าที่ไม่ทราบ</option><option value="manual">Manual · ใช้ค่าที่ระบุเป็นเงื่อนไข</option></select></label>
 <div id="orbital-target-fields">
@@ -55,7 +55,7 @@
 <div class="section-label">09 · ASCENT & NUMERICAL SETTINGS</div>
 <label class="check"><input id="auto_profile" type="checkbox" checked> Auto ascent profile (แนะนำเมื่อไม่ทราบ flight profile)</label>
 <div id="manual-profile" class="subpanel hidden"><div class="two"><label>Vertical time s<input id="vertical_time" type="number" min="0" max="30"></label><label>Pitch kick °<input id="kick_angle" type="number" min="0" max="20" step=".1"></label></div><label>Kick duration s<input id="kick_duration" type="number" min="1" max="40"></label></div>
-<div class="two"><label>Minimum elevation °<input id="min_elevation" type="number" min="0" max="30" step=".5"></label><label>Integration timestep<select id="timestep"><option>0.02 s</option><option selected>0.05 s</option><option>0.10 s</option><option>0.20 s</option></select></label></div>
+<div class="two"><label>Minimum elevation °<input id="min_elevation" type="number" min="0" max="30" step=".5"></label><label>Integration timestep<select id="timestep"><option value=".02">0.02 s</option><option value=".05" selected>0.05 s</option><option value=".1">0.10 s</option><option value=".2">0.20 s</option></select></label></div>
 <label>จำนวนรอบวงโคจรที่แสดง<select id="orbit_count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option></select></label>
 <button class="run-button" type="submit"><span>▶</span> RUN SIMULATION</button>
 <p class="form-note">ผลลัพธ์เป็นแบบจำลองตามพารามิเตอร์ ไม่ใช่เส้นทางปล่อยจริงที่ยืนยันจากผู้ให้บริการ</p>
