@@ -338,3 +338,38 @@ def test_capture_guidance_caps_radial_authority_even_if_caller_requests_90_perce
     )
     assert direction[0] == pytest.approx(0.65)
     assert direction[1] == pytest.approx((1.0 - 0.65 ** 2) ** 0.5)
+
+
+
+def test_gravity_turn_keeps_positive_net_radial_acceleration_during_early_ascent():
+    radius = rp.RE + 5_000.0
+    tangential_speed = 400.0
+    thrust_accel = 16.5
+    direction = rp._gravity_turn_direction(
+        [1.0, 0.0, 0.0], [0.0, 1.0, 0.0],
+        [0.1, 1.0, 0.0], thrust_accel, radius, tangential_speed
+    )
+    natural = rp._radial_environment_accel(radius, tangential_speed)
+    net_radial = natural + thrust_accel * direction[0]
+    assert direction[0] > 0.0
+    assert net_radial >= 0.5 - 1e-9
+
+
+def test_gravity_turn_does_not_command_downward_thrust_when_velocity_is_descending():
+    radius = rp.RE + 5_000.0
+    direction = rp._gravity_turn_direction(
+        [1.0, 0.0, 0.0], [0.0, 1.0, 0.0],
+        [-0.45, 0.89, 0.0], 18.0, radius, 800.0
+    )
+    assert direction[0] >= 0.0
+    assert direction[1] > 0.0
+    assert float(direction @ direction) == pytest.approx(1.0)
+
+
+def test_gravity_turn_radial_command_is_bounded_and_preserves_tangential_authority():
+    direction = rp._gravity_turn_direction(
+        [1.0, 0.0, 0.0], [0.0, 1.0, 0.0],
+        [0.0, 1.0, 0.0], 2.0, rp.RE + 5_000.0, 100.0
+    )
+    assert direction[0] <= 0.95
+    assert direction[1] > 0.0

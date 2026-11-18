@@ -338,6 +338,46 @@ def _radial_environment_accel(radius, tangential_speed):
     return tangential_speed ** 2 / radius - MU / radius ** 2
 
 
+def _gravity_turn_direction(up, horizontal, velocity_plane, thrust_accel,
+                            radius, inertial_tangential_speed,
+                            min_radial_accel=0.5):
+    """Keep powered gravity-turn flight climbing until capture guidance takes over.
+
+    The ordinary velocity-aligned gravity turn can point below the local
+    horizon after a small perturbation or an overly aggressive pitch-over.
+    This bounded radial-acceleration floor prevents thrust from reinforcing
+    a descent while preserving as much in-plane tangential thrust as possible.
+    """
+    up = np.asarray(up, dtype=float)
+    up = up / max(float(np.linalg.norm(up)), 1e-12)
+    tangent = np.asarray(velocity_plane, dtype=float)
+    tangent = tangent - float(np.dot(tangent, up)) * up
+    tangent_norm = float(np.linalg.norm(tangent))
+    if tangent_norm <= 1e-9:
+        tangent = np.asarray(horizontal, dtype=float)
+        tangent = tangent - float(np.dot(tangent, up)) * up
+        tangent_norm = float(np.linalg.norm(tangent))
+    if tangent_norm <= 1e-9:
+        return up
+    tangent /= tangent_norm
+
+    accel = max(float(thrust_accel), 0.0)
+    natural_radial = _radial_environment_accel(
+        radius, inertial_tangential_speed
+    )
+    if accel <= 1e-9:
+        radial_fraction = 1.0
+    else:
+        required = (float(min_radial_accel) - natural_radial) / accel
+        # Leave a small tangential component for downrange velocity. If the
+        # vehicle lacks enough thrust to meet the floor, use the bounded
+        # maximum and expose the shortfall in the resulting telemetry.
+        radial_fraction = float(np.clip(required, 0.0, 0.95))
+    tangent_fraction = float(np.sqrt(max(1.0 - radial_fraction ** 2, 0.0)))
+    direction = radial_fraction * up + tangent_fraction * tangent
+    return direction / max(float(np.linalg.norm(direction)), 1e-12)
+
+
 def _project_velocity_to_plane(velocity, plane_normal):
     """Project an inertial velocity into the fixed launch plane."""
     velocity = np.asarray(velocity, dtype=float)
@@ -566,7 +606,17 @@ def simulate_ascent(vehicle: Vehicle, mission: Mission,
                 radial_environment_accel=radial_environment,
                 max_radial_fraction=radial_limit
             )
-        return v_plane / nv_plane if nv_plane > 1.0 else up
+        if nv_plane > 1.0:
+            inertial_velocity = rv[3:6]
+            inertial_radial_velocity = float(np.dot(inertial_velocity, up))
+            inertial_tangent_speed = float(np.linalg.norm(
+                inertial_velocity - inertial_radial_velocity * up
+            ))
+            return _gravity_turn_direction(
+                up, horiz, v_plane, thrust_accel, rn,
+                inertial_tangent_speed
+            )
+        return up
 
     def deriv(rv, mass, thr_vec, alt):
         rr, vv = rv[0:3], rv[3:6]
